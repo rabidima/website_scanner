@@ -3,18 +3,26 @@
 import { useState } from "react";
 import type { Category, Technology } from "@/lib/detect";
 
+interface PageInfo {
+  title: string | null;
+  description: string | null;
+  h1: string | null;
+}
+
 interface ScanResponse {
   requestedUrl: string;
   finalUrl: string;
   statusCode: number;
   scannedAt: string;
   technologies: Technology[];
+  page: PageInfo;
   meta: { server: string | null; poweredBy: string | null };
 }
 
 const CATEGORY_ORDER: Category[] = [
   "CMS",
   "Ecommerce",
+  "Shopify Apps",
   "JS Framework",
   "CSS Framework",
   "Analytics",
@@ -97,6 +105,21 @@ export default function Home() {
           <div className="summary">
             Scanned <code>{result.finalUrl}</code> · HTTP {result.statusCode} ·{" "}
             {result.technologies.length} technolog{result.technologies.length === 1 ? "y" : "ies"} detected
+          </div>
+
+          <div className="page-info-card">
+            <div className="page-info-row">
+              <span className="page-info-label">Title</span>
+              <span className="page-info-value">{result.page.title ?? <em>Not found</em>}</span>
+            </div>
+            <div className="page-info-row">
+              <span className="page-info-label">Description</span>
+              <span className="page-info-value">{result.page.description ?? <em>Not found</em>}</span>
+            </div>
+            <div className="page-info-row">
+              <span className="page-info-label">H1</span>
+              <span className="page-info-value">{result.page.h1 ?? <em>Not found</em>}</span>
+            </div>
           </div>
 
           <div className="results">

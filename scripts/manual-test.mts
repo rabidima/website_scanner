@@ -5,6 +5,7 @@
  * Run with: npx tsx scripts/manual-test.mts
  */
 import { detectTechnologies } from "../lib/detect";
+import { extractPageInfo } from "../lib/extract-meta";
 
 const cases: { label: string; expect: string[]; input: Parameters<typeof detectTechnologies>[0] }[] = [
   {
@@ -24,14 +25,20 @@ const cases: { label: string; expect: string[]; input: Parameters<typeof detectT
     },
   },
   {
-    label: "Shopify storefront on Cloudflare with Klaviyo + Stripe",
-    expect: ["Shopify", "Cloudflare", "Klaviyo", "Stripe"],
+    label: "Shopify storefront on Cloudflare with Klaviyo + Stripe + apps",
+    expect: [
+      "Shopify", "Cloudflare", "Klaviyo", "Stripe",
+      "Judge.me", "Recharge", "PageFly",
+    ],
     input: {
       html: `<!doctype html><html><head>
         <link rel="canonical" href="https://mystore.myshopify.com/">
         <script src="https://cdn.shopify.com/s/files/1/0001/theme.js"></script>
         <script src="https://a.klaviyo.com/media/js/onsite/onsite.js"></script>
         <script src="https://js.stripe.com/v3/"></script>
+        <script src="https://cdn.judge.me/widget.js"></script>
+        <script src="https://widget.rechargepayments.com/loader.js"></script>
+        <link rel="stylesheet" href="https://d1um8236vmc4z2.cloudfront.net/pagefly.io/style.css">
         </head><body></body></html>`,
       headers: { server: "cloudflare", "cf-ray": "8a1b2c3d4e5f" },
       cookies: [],
@@ -80,5 +87,55 @@ for (const c of cases) {
   }
 }
 
-console.log(`\n${failures === 0 ? "All fixture cases passed." : `${failures} case(s) failed.`}`);
-process.exit(failures === 0 ? 0 : 1);
+const pageInfoCases: { label: string; html: string; expect: { title: string | null; description: string | null; h1: string | null } }[] = [
+  {
+    label: "Standard title + meta description + H1 with nested markup",
+    html: `<!doctype html><html><head>
+      <title>Acme Co — Handmade Candles</title>
+      <meta name="description" content="Small-batch soy candles, shipped worldwide.">
+      </head><body><h1>Welcome to <em>Acme</em> Co</h1></body></html>`,
+    expect: {
+      title: "Acme Co — Handmade Candles",
+      description: "Small-batch soy candles, shipped worldwide.",
+      h1: "Welcome to Acme Co",
+    },
+  },
+  {
+    label: "Falls back to og:description when meta description is missing",
+    html: `<!doctype html><html><head>
+      <title>Fallback Test</title>
+      <meta property="og:description" content="OG fallback description text.">
+      </head><body><h1>Main heading</h1></body></html>`,
+    expect: { title: "Fallback Test", description: "OG fallback description text.", h1: "Main heading" },
+  },
+  {
+    label: "Missing title, description, and H1 entirely",
+    html: `<!doctype html><html><head></head><body><p>No headings here.</p></body></html>`,
+    expect: { title: null, description: null, h1: null },
+  },
+  {
+    label: "Whitespace-collapsed multi-line H1 and title with HTML entity",
+    html: `<!doctype html><html><head><title>Tom &amp; Jerry\'s Shop</title></head>
+      <body><h1>\n        Free   shipping\n        over $50\n      </h1></body></html>`,
+    expect: { title: "Tom & Jerry's Shop", description: null, h1: "Free shipping over $50" },
+  },
+];
+
+let pageInfoFailures = 0;
+for (const c of pageInfoCases) {
+  const got = extractPageInfo(c.html);
+  const pass =
+    got.title === c.expect.title &&
+    got.description === c.expect.description &&
+    got.h1 === c.expect.h1;
+  console.log(`\n${pass ? "PASS" : "FAIL"} — ${c.label}`);
+  console.log(`  got: ${JSON.stringify(got)}`);
+  if (!pass) {
+    console.log(`  expected: ${JSON.stringify(c.expect)}`);
+    pageInfoFailures++;
+  }
+}
+
+const totalFailures = failures + pageInfoFailures;
+console.log(`\n${totalFailures === 0 ? "All fixture cases passed." : `${totalFailures} case(s) failed.`}`);
+process.exit(totalFailures === 0 ? 0 : 1);

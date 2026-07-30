@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { fetchSiteSafely } from "@/lib/fetch-site";
 import { detectTechnologies } from "@/lib/detect";
 import { resolveCorsOrigin, corsHeaders } from "@/lib/cors";
+import { extractPageInfo } from "@/lib/extract-meta";
 
 // This route resolves DNS and streams a raw fetch response, which needs the
 // full Node.js runtime (not the Edge runtime).
@@ -70,6 +71,7 @@ export async function POST(req: NextRequest) {
       cookies: result.cookies,
       finalUrl: result.finalUrl,
     });
+    const page = extractPageInfo(result.html);
 
     return json(
       {
@@ -78,6 +80,7 @@ export async function POST(req: NextRequest) {
         statusCode: result.statusCode,
         scannedAt: new Date().toISOString(),
         technologies,
+        page,
         meta: {
           server: result.headers["server"] ?? null,
           poweredBy: result.headers["x-powered-by"] ?? null,

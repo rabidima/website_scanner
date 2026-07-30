@@ -5,7 +5,9 @@
  * we look for tell-tale strings in HTML, response headers, cookies, and script/link
  * URLs, and match them against a curated signature table. This is a from-scratch,
  * MIT-safe signature set (no scraped Wappalyzer DB), intentionally scoped to the
- * ~40 highest-signal, most common technologies for an MVP.
+ * ~75 highest-signal, most common technologies for an MVP — including a
+ * dedicated "Shopify Apps" category for the most popular reviews/subscription/
+ * upsell/page-builder/chat apps merchants install on top of Shopify itself.
  *
  * To add a technology: add one entry to SIGNATURES. No other code changes needed.
  */
@@ -13,6 +15,7 @@
 export type Category =
   | "CMS"
   | "Ecommerce"
+  | "Shopify Apps"
   | "JS Framework"
   | "CSS Framework"
   | "Analytics"
@@ -139,6 +142,138 @@ const SIGNATURES: Signature[] = [
     category: "Ecommerce",
     confidence: "high",
     html: ["cdn11.bigcommerce.com", "bigcommerce.com/s-"],
+  },
+
+  // -------------------------------------------------------- Shopify Apps
+  // Detected by each app's own script/asset domain. These are Shopify-app-
+  // specific enough that a match is high-confidence even without also
+  // detecting "Shopify" itself — but in practice they'll only ever appear
+  // alongside it, since these apps only run on Shopify storefronts.
+  {
+    name: "Judge.me",
+    category: "Shopify Apps",
+    confidence: "high",
+    html: ["judge.me", "judgeme"],
+  },
+  {
+    name: "Loox",
+    category: "Shopify Apps",
+    confidence: "high",
+    html: ["loox.io", "loox-reviews"],
+  },
+  {
+    name: "Yotpo",
+    category: "Shopify Apps",
+    confidence: "high",
+    html: ["yotpo.com", "staticw2.yotpo.com"],
+  },
+  {
+    name: "Okendo",
+    category: "Shopify Apps",
+    confidence: "high",
+    html: ["okendo.io"],
+  },
+  {
+    name: "Stamped.io",
+    category: "Shopify Apps",
+    confidence: "high",
+    html: ["stamped.io"],
+  },
+  {
+    name: "Smile.io",
+    category: "Shopify Apps",
+    confidence: "high",
+    html: ["smile.io", "smile-ui"],
+  },
+  {
+    name: "Recharge",
+    category: "Shopify Apps",
+    confidence: "high",
+    html: ["rechargepayments.com", "rechargeapps.com"],
+  },
+  {
+    name: "Bold Subscriptions",
+    category: "Shopify Apps",
+    confidence: "medium",
+    html: ["boldapps.net", "bold-subscriptions"],
+  },
+  {
+    name: "Rebuy",
+    category: "Shopify Apps",
+    confidence: "high",
+    html: ["rebuyengine.com"],
+  },
+  {
+    name: "ReConvert",
+    category: "Shopify Apps",
+    confidence: "medium",
+    html: ["reconvert"],
+  },
+  {
+    name: "PageFly",
+    category: "Shopify Apps",
+    confidence: "high",
+    html: ["pagefly.io"],
+  },
+  {
+    name: "GemPages",
+    category: "Shopify Apps",
+    confidence: "high",
+    html: ["gempages.net"],
+  },
+  {
+    name: "Shogun",
+    category: "Shopify Apps",
+    confidence: "high",
+    html: ["getshogun.com"],
+  },
+  {
+    name: "Weglot",
+    category: "Shopify Apps",
+    confidence: "high",
+    html: ["weglot.com"],
+  },
+  {
+    name: "Privy",
+    category: "Shopify Apps",
+    confidence: "high",
+    html: ["privy.com"],
+  },
+  {
+    name: "OptiMonk",
+    category: "Shopify Apps",
+    confidence: "high",
+    html: ["optimonk.com"],
+  },
+  {
+    name: "Gorgias",
+    category: "Shopify Apps",
+    confidence: "high",
+    html: ["gorgias.chat", "gorgias.com/widget"],
+  },
+  {
+    name: "TrustPulse",
+    category: "Shopify Apps",
+    confidence: "medium",
+    html: ["trustpulse.io"],
+  },
+  {
+    name: "Swym Wishlist",
+    category: "Shopify Apps",
+    confidence: "high",
+    html: ["swymrelay.com"],
+  },
+  {
+    name: "ReferralCandy",
+    category: "Shopify Apps",
+    confidence: "high",
+    html: ["referralcandy.com"],
+  },
+  {
+    name: "Vitals",
+    category: "Shopify Apps",
+    confidence: "medium",
+    html: ["vitals.co/app", "vitals-cdn"],
   },
 
   // ------------------------------------------------------ JS Framework

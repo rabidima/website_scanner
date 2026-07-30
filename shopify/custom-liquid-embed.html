@@ -61,6 +61,17 @@
       background: #fdecec; border: 1px solid #f3b8b8; color: #a12a2a;
       border-radius: var(--ss-radius); padding: 10px 14px; font-size: 13px; margin-bottom: 14px;
     }
+    .stackscan-widget .ss-page-info {
+      background: var(--ss-bg); border: 1px solid var(--ss-border); border-radius: var(--ss-radius);
+      padding: 12px 16px; margin-bottom: 14px; display: flex; flex-direction: column; gap: 8px;
+    }
+    .stackscan-widget .ss-page-row { display: flex; gap: 10px; font-size: 13px; line-height: 1.5; }
+    .stackscan-widget .ss-page-label {
+      flex: 0 0 80px; color: var(--ss-text-muted); font-size: 11px; text-transform: uppercase;
+      letter-spacing: 0.05em; padding-top: 2px;
+    }
+    .stackscan-widget .ss-page-value { flex: 1; word-break: break-word; }
+    .stackscan-widget .ss-page-value em { color: var(--ss-text-muted); font-style: normal; }
     .stackscan-widget .ss-results { display: flex; flex-direction: column; gap: 12px; }
     .stackscan-widget .ss-card { background: var(--ss-bg); border: 1px solid var(--ss-border); border-radius: var(--ss-radius); padding: 14px 16px; }
     .stackscan-widget .ss-cat { font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--ss-text-muted); margin: 0 0 10px; }
@@ -78,24 +89,57 @@
   </div>
   <div class="ss-status" id="ss-status"></div>
   <div id="ss-error" style="display:none;" class="ss-error"></div>
+  <div class="ss-page-info" id="ss-page-info" style="display:none;"></div>
   <div class="ss-results" id="ss-results"></div>
 
   <script>
     (function () {
-      // Replace with your deployed StackScan API origin (no trailing slash).
-      var API_BASE = "https://YOUR-DEPLOYMENT.vercel.app";
+      // Replace with your deployed StackScan API origin. Trailing slash is
+      // stripped automatically below so "…app/" can't turn into "…app//api/scan"
+      // — a double slash there triggers a Vercel redirect, and browsers refuse
+      // to follow redirects during a CORS preflight, which fails as a CORS
+      // error even when ALLOWED_ORIGINS is set correctly.
+      var API_BASE = "https://YOUR-DEPLOYMENT.vercel.app".replace(/\/+$/, "");
 
       var CATEGORY_ORDER = [
-        "CMS", "Ecommerce", "JS Framework", "CSS Framework", "Analytics",
-        "Tag Manager", "CDN / Hosting", "Web Server", "Payment", "Fonts",
-        "Chat / Support", "Email / Marketing"
+        "CMS", "Ecommerce", "Shopify Apps", "JS Framework", "CSS Framework",
+        "Analytics", "Tag Manager", "CDN / Hosting", "Web Server", "Payment",
+        "Fonts", "Chat / Support", "Email / Marketing"
       ];
 
       var input = document.getElementById("ss-url");
       var button = document.getElementById("ss-go");
       var status = document.getElementById("ss-status");
       var errorBox = document.getElementById("ss-error");
+      var pageInfo = document.getElementById("ss-page-info");
       var results = document.getElementById("ss-results");
+
+      function renderPageInfo(page) {
+        function row(label, value) {
+          var r = document.createElement("div");
+          r.className = "ss-page-row";
+          var l = document.createElement("span");
+          l.className = "ss-page-label";
+          l.textContent = label;
+          var v = document.createElement("span");
+          v.className = "ss-page-value";
+          if (value) {
+            v.textContent = value;
+          } else {
+            var em = document.createElement("em");
+            em.textContent = "Not found";
+            v.appendChild(em);
+          }
+          r.appendChild(l);
+          r.appendChild(v);
+          return r;
+        }
+        pageInfo.innerHTML = "";
+        pageInfo.appendChild(row("Title", page.title));
+        pageInfo.appendChild(row("Description", page.description));
+        pageInfo.appendChild(row("H1", page.h1));
+        pageInfo.style.display = "flex";
+      }
 
       function render(technologies) {
         results.innerHTML = "";
@@ -128,6 +172,7 @@
         var url = input.value.trim();
         if (!url) return;
         errorBox.style.display = "none";
+        pageInfo.style.display = "none";
         results.innerHTML = "";
         status.textContent = "Fetching the page and checking signatures…";
         button.disabled = true;
@@ -150,6 +195,7 @@
             }
             status.textContent = "Scanned " + r.data.finalUrl + " · HTTP " + r.data.statusCode +
               " · " + r.data.technologies.length + " technologies detected";
+            if (r.data.page) renderPageInfo(r.data.page);
             render(r.data.technologies);
           })
           .catch(function () {
