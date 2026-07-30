@@ -51,6 +51,22 @@ native-styled embed, or `shopify/iframe-embed.html` for a 2-minute iframe).
 The API route supports CORS via the `ALLOWED_ORIGINS` env var for exactly
 this use case.
 
+## Performance diagnostics (Google PageSpeed Insights)
+
+Separate from the tech-stack scan, there's an opt-in "Diagnose performance
+issues" section that runs a real Lighthouse audit via Google's free
+PageSpeed Insights API and shows Performance/Accessibility/Best
+Practices/SEO scores for mobile and desktop. It's a distinct action (not
+bundled into the main scan) because Lighthouse audits are slow — commonly
+10-30+ seconds — so folding it into the instant tech-stack results would
+make the whole scan feel broken.
+
+To enable it: set `GOOGLE_PAGESPEED_API_KEY` on Vercel (Project Settings →
+Environment Variables) and redeploy. See `.env.example` for how to get a
+free key (no billing required, 25,000 requests/day). It'll technically work
+without a key too, but unauthenticated PSI requests share a very small
+global quota and will get rate-limited almost immediately under real use.
+
 ## What it detects (v0.1 signature set)
 
 CMS: WordPress, Shopify, Wix, Squarespace, Webflow, Drupal, Joomla, Ghost, HubSpot CMS.
@@ -80,6 +96,10 @@ coverage is just adding more entries to `SIGNATURES`.
   for this MVP. Fine to ship as-is, worth revisiting before this scales.
 - **Signature set is intentionally narrow (~55 checks).** Coverage grows linearly
   with entries added to `lib/detect.ts` — no architecture change needed to extend it.
+- **PageSpeed audits can exceed short serverless timeouts on very slow sites.**
+  `app/api/pagespeed/route.ts` requests the max `maxDuration` available on
+  Vercel's free tier (60s); if a target is slow enough that Lighthouse itself
+  exceeds that, the request will time out. Uncommon, but possible.
 - **No scan history / persistence.** Every scan is stateless. If you want a "recent
   scans" feed or shareable report links, that's a Postgres table + one more route
   away (e.g. Vercel Postgres or Supabase).

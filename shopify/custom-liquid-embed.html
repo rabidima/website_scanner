@@ -11,6 +11,11 @@
   4. Paste this entire file's contents into that block.
   5. Replace API_BASE below with your Vercel deployment URL. Save.
 
+  The "Diagnose performance issues" section works out of the box (calls
+  Google's PageSpeed Insights API via your backend), but for real traffic
+  set GOOGLE_PAGESPEED_API_KEY on Vercel too — see .env.example — or it'll
+  hit a very low unauthenticated quota fast.
+
   Everything is scoped under .stackscan-widget so it won't leak styles into
   the rest of your theme. Colors are theme-adaptable via the CSS variables
   at the top of the <style> block — tweak --ss-accent to match your brand.
@@ -81,6 +86,32 @@
       border: 1px solid var(--ss-border); border-radius: 999px; padding: 6px 12px; font-size: 13px;
     }
     .stackscan-widget .ss-chip::before { content: ""; width: 6px; height: 6px; border-radius: 999px; background: #2fa86b; }
+    .stackscan-widget .ss-psi {
+      margin-top: 20px; padding-top: 18px; border-top: 1px solid var(--ss-border);
+    }
+    .stackscan-widget .ss-psi-header { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+    .stackscan-widget .ss-psi-header h3 { font-size: 15px; margin: 0; font-weight: 600; }
+    .stackscan-widget .ss-psi-sub { font-size: 12px; color: var(--ss-text-muted); margin: 6px 0 0; }
+    .stackscan-widget .ss-psi-results { margin-top: 16px; display: flex; flex-direction: column; gap: 16px; }
+    .stackscan-widget .ss-psi-strategy-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--ss-text-muted); margin-bottom: 8px; }
+    .stackscan-widget .ss-gauge-row { display: flex; gap: 20px; flex-wrap: wrap; }
+    .stackscan-widget .ss-gauge { display: flex; flex-direction: column; align-items: center; gap: 4px; min-width: 84px; }
+    .stackscan-widget .ss-gauge-label { font-size: 11px; color: var(--ss-text-muted); text-align: center; }
+    .stackscan-widget .ss-vitals { margin-top: 14px; }
+    .stackscan-widget .ss-vitals-heading { font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--ss-text-muted); margin-bottom: 8px; }
+    .stackscan-widget .ss-vitals-source { text-transform: none; letter-spacing: normal; opacity: 0.8; }
+    .stackscan-widget .ss-vitals-row { display: flex; gap: 8px; flex-wrap: wrap; }
+    .stackscan-widget .ss-vital-pill { display: flex; align-items: baseline; gap: 6px; background: #fff; border: 1px solid; border-radius: 999px; padding: 5px 12px; font-size: 12px; }
+    .stackscan-widget .ss-vital-label { color: var(--ss-text-muted); font-weight: 600; font-size: 10px; }
+    .stackscan-widget .ss-opp-block { margin-top: 14px; }
+    .stackscan-widget .ss-audit-group-title { font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--ss-text-muted); margin-bottom: 6px; }
+    .stackscan-widget .ss-opp-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 5px; }
+    .stackscan-widget .ss-opp-list li { display: flex; justify-content: space-between; gap: 10px; font-size: 12px; background: #fff; border-radius: 6px; padding: 6px 10px; }
+    .stackscan-widget .ss-opp-savings { color: var(--ss-text-muted); white-space: nowrap; }
+    .stackscan-widget .ss-audit-groups { margin-top: 14px; display: flex; flex-direction: column; gap: 10px; }
+    .stackscan-widget .ss-audit-list { list-style: none; margin: 0; padding: 0; }
+    .stackscan-widget .ss-audit-list li { font-size: 12px; padding: 2px 0; }
+    .stackscan-widget .ss-audit-list li::before { content: "\00b7 "; color: #a12a2a; }
   </style>
 
   <div class="ss-form">
@@ -91,6 +122,17 @@
   <div id="ss-error" style="display:none;" class="ss-error"></div>
   <div class="ss-page-info" id="ss-page-info" style="display:none;"></div>
   <div class="ss-results" id="ss-results"></div>
+
+  <div class="ss-psi" id="ss-psi" style="display:none;">
+    <div class="ss-psi-header">
+      <h3>Diagnose performance issues</h3>
+      <button id="ss-psi-go" type="button">Run diagnostics</button>
+    </div>
+    <p class="ss-psi-sub">Runs a real Lighthouse audit (Google PageSpeed Insights). Takes 10-30 seconds.</p>
+    <div class="ss-status" id="ss-psi-status"></div>
+    <div id="ss-psi-error" style="display:none;" class="ss-error"></div>
+    <div class="ss-psi-results" id="ss-psi-results"></div>
+  </div>
 
   <script>
     (function () {
@@ -113,6 +155,193 @@
       var errorBox = document.getElementById("ss-error");
       var pageInfo = document.getElementById("ss-page-info");
       var results = document.getElementById("ss-results");
+      var psiSection = document.getElementById("ss-psi");
+      var psiGoButton = document.getElementById("ss-psi-go");
+      var psiStatus = document.getElementById("ss-psi-status");
+      var psiErrorBox = document.getElementById("ss-psi-error");
+      var psiResults = document.getElementById("ss-psi-results");
+      var lastScannedUrl = null;
+
+      function gaugeColor(score) {
+        if (score === null) return "#5f5e5a";
+        if (score >= 90) return "#2fa86b";
+        if (score >= 50) return "#e0a72e";
+        return "#d1443f";
+      }
+
+      function gaugeSvg(score) {
+        var r = 40, c = 2 * Math.PI * r;
+        var pct = score === null ? 0 : score;
+        var offset = c - (pct / 100) * c;
+        var color = gaugeColor(score);
+        var ring = score === null ? "" :
+          '<circle cx="50" cy="50" r="' + r + '" fill="none" stroke="' + color + '" stroke-width="8" ' +
+          'stroke-linecap="round" stroke-dasharray="' + c + '" stroke-dashoffset="' + offset + '" transform="rotate(-90 50 50)"></circle>';
+        return '<svg viewBox="0 0 100 100" width="76" height="76">' +
+          '<circle cx="50" cy="50" r="' + r + '" fill="none" stroke="#e2e2e2" stroke-width="8"></circle>' +
+          ring +
+          '<text x="50" y="56" text-anchor="middle" font-size="24" font-weight="600" fill="' + color + '">' + (score === null ? "—" : score) + '</text>' +
+          '</svg>';
+      }
+
+      function gaugeEl(label, score) {
+        var wrap = document.createElement("div");
+        wrap.className = "ss-gauge";
+        wrap.innerHTML = gaugeSvg(score);
+        var lab = document.createElement("div");
+        lab.className = "ss-gauge-label";
+        lab.textContent = label;
+        wrap.appendChild(lab);
+        return wrap;
+      }
+
+      function ratingColor(rating) {
+        if (rating === "good") return "#2fa86b";
+        if (rating === "needs-improvement") return "#e0a72e";
+        return "#d1443f";
+      }
+
+      function renderVitals(container, webVitals) {
+        if (!webVitals || !webVitals.metrics || webVitals.metrics.length === 0) return;
+        var block = document.createElement("div");
+        block.className = "ss-vitals";
+        var heading = document.createElement("div");
+        heading.className = "ss-vitals-heading";
+        heading.textContent = "Core Web Vitals ";
+        var source = document.createElement("span");
+        source.className = "ss-vitals-source";
+        source.textContent = "(" + (webVitals.source === "field" ? "real user data" : "lab estimate") + ")";
+        heading.appendChild(source);
+        block.appendChild(heading);
+        var row = document.createElement("div");
+        row.className = "ss-vitals-row";
+        webVitals.metrics.forEach(function (v) {
+          var color = ratingColor(v.rating);
+          var pill = document.createElement("div");
+          pill.className = "ss-vital-pill";
+          pill.style.borderColor = color;
+          pill.innerHTML = '<span class="ss-vital-label">' + v.label + '</span><span style="color:' + color + ';font-weight:600;">' + v.value + '</span>';
+          row.appendChild(pill);
+        });
+        block.appendChild(row);
+        container.appendChild(block);
+      }
+
+      function renderOpportunities(container, opportunities) {
+        if (!opportunities || opportunities.length === 0) return;
+        var block = document.createElement("div");
+        block.className = "ss-opp-block";
+        var title = document.createElement("div");
+        title.className = "ss-audit-group-title";
+        title.textContent = "Top opportunities";
+        block.appendChild(title);
+        var list = document.createElement("ul");
+        list.className = "ss-opp-list";
+        opportunities.forEach(function (o) {
+          var li = document.createElement("li");
+          li.title = o.description || "";
+          li.innerHTML = '<span>' + o.title + '</span><span class="ss-opp-savings">' + o.displaySavings + '</span>';
+          list.appendChild(li);
+        });
+        block.appendChild(list);
+        container.appendChild(block);
+      }
+
+      function renderAuditGroup(container, title, items) {
+        if (!items || items.length === 0) return null;
+        var group = document.createElement("div");
+        var heading = document.createElement("div");
+        heading.className = "ss-audit-group-title";
+        heading.textContent = title;
+        group.appendChild(heading);
+        var list = document.createElement("ul");
+        list.className = "ss-audit-list";
+        items.forEach(function (a) {
+          var li = document.createElement("li");
+          li.title = a.description || "";
+          li.textContent = a.title;
+          list.appendChild(li);
+        });
+        group.appendChild(list);
+        container.appendChild(group);
+      }
+
+      function renderFailedAudits(container, failedAudits) {
+        if (!failedAudits) return;
+        var block = document.createElement("div");
+        block.className = "ss-audit-groups";
+        renderAuditGroup(block, "Accessibility issues", failedAudits.accessibility);
+        renderAuditGroup(block, "SEO issues", failedAudits.seo);
+        renderAuditGroup(block, "Best practices issues", failedAudits.bestPractices);
+        if (block.childNodes.length > 0) container.appendChild(block);
+      }
+
+      function renderStrategy(container, label, result) {
+        var wrap = document.createElement("div");
+        var lab = document.createElement("div");
+        lab.className = "ss-psi-strategy-label";
+        lab.textContent = label;
+        wrap.appendChild(lab);
+        if (result.error) {
+          var err = document.createElement("div");
+          err.style.cssText = "font-size:13px;color:#a12a2a;";
+          err.textContent = result.error;
+          wrap.appendChild(err);
+        } else {
+          var row = document.createElement("div");
+          row.className = "ss-gauge-row";
+          var s = result.scores || {};
+          row.appendChild(gaugeEl("Performance", s.performance));
+          row.appendChild(gaugeEl("Accessibility", s.accessibility));
+          row.appendChild(gaugeEl("Best Practices", s.bestPractices));
+          row.appendChild(gaugeEl("SEO", s.seo));
+          wrap.appendChild(row);
+
+          var d = result.detail;
+          if (d) {
+            renderVitals(wrap, d.webVitals);
+            renderOpportunities(wrap, d.opportunities);
+            renderFailedAudits(wrap, d.failedAudits);
+          }
+        }
+        container.appendChild(wrap);
+      }
+
+      function runPageSpeed() {
+        if (!lastScannedUrl) return;
+        psiErrorBox.style.display = "none";
+        psiResults.innerHTML = "";
+        psiStatus.textContent = "Running Lighthouse audits for mobile and desktop…";
+        psiGoButton.disabled = true;
+
+        fetch(API_BASE + "/api/pagespeed", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ url: lastScannedUrl })
+        })
+          .then(function (res) {
+            return res.json().then(function (data) { return { ok: res.ok, data: data }; });
+          })
+          .then(function (r) {
+            psiGoButton.disabled = false;
+            psiGoButton.textContent = "Re-run";
+            if (!r.ok) {
+              psiStatus.textContent = "";
+              psiErrorBox.textContent = r.data.error || "PageSpeed diagnostics failed.";
+              psiErrorBox.style.display = "block";
+              return;
+            }
+            psiStatus.textContent = "";
+            renderStrategy(psiResults, "Mobile", r.data.mobile);
+            renderStrategy(psiResults, "Desktop", r.data.desktop);
+          })
+          .catch(function () {
+            psiGoButton.disabled = false;
+            psiStatus.textContent = "";
+            psiErrorBox.textContent = "Network error — check ALLOWED_ORIGINS includes this store's domain.";
+            psiErrorBox.style.display = "block";
+          });
+      }
 
       function renderPageInfo(page) {
         function row(label, value) {
@@ -174,6 +403,8 @@
         errorBox.style.display = "none";
         pageInfo.style.display = "none";
         results.innerHTML = "";
+        psiSection.style.display = "none";
+        psiResults.innerHTML = "";
         status.textContent = "Fetching the page and checking signatures…";
         button.disabled = true;
 
@@ -197,6 +428,9 @@
               " · " + r.data.technologies.length + " technologies detected";
             if (r.data.page) renderPageInfo(r.data.page);
             render(r.data.technologies);
+            lastScannedUrl = r.data.finalUrl;
+            psiGoButton.textContent = "Run diagnostics";
+            psiSection.style.display = "block";
           })
           .catch(function () {
             button.disabled = false;
@@ -210,6 +444,7 @@
       input.addEventListener("keydown", function (e) {
         if (e.key === "Enter") scan();
       });
+      psiGoButton.addEventListener("click", runPageSpeed);
     })();
   </script>
 </div>

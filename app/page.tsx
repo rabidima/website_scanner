@@ -19,6 +19,186 @@ interface ScanResponse {
   meta: { server: string | null; poweredBy: string | null };
 }
 
+interface PsiScores {
+  performance: number | null;
+  accessibility: number | null;
+  bestPractices: number | null;
+  seo: number | null;
+}
+
+type VitalRating = "good" | "needs-improvement" | "poor";
+
+interface WebVital {
+  label: string;
+  value: string;
+  rating: VitalRating;
+}
+
+interface WebVitals {
+  source: "field" | "lab";
+  metrics: WebVital[];
+}
+
+interface AuditIssue {
+  id: string;
+  title: string;
+  description: string;
+}
+
+interface Opportunity extends AuditIssue {
+  savingsMs: number;
+  displaySavings: string;
+}
+
+interface PsiDetail {
+  webVitals: WebVitals | null;
+  opportunities: Opportunity[];
+  failedAudits: {
+    accessibility: AuditIssue[];
+    seo: AuditIssue[];
+    bestPractices: AuditIssue[];
+  };
+}
+
+interface PsiResult {
+  strategy: "mobile" | "desktop";
+  scores: PsiScores | null;
+  detail: PsiDetail | null;
+  error: string | null;
+}
+
+interface PageSpeedResponse {
+  url: string;
+  mobile: PsiResult;
+  desktop: PsiResult;
+}
+
+function ratingColor(rating: VitalRating): string {
+  if (rating === "good") return "#3ecf8e";
+  if (rating === "needs-improvement") return "#e8b64a";
+  return "#ff6b6b";
+}
+
+function VitalPill({ vital }: { vital: WebVital }) {
+  const color = ratingColor(vital.rating);
+  return (
+    <div className="vital-pill" style={{ borderColor: color }}>
+      <span className="vital-label">{vital.label}</span>
+      <span className="vital-value" style={{ color }}>{vital.value}</span>
+    </div>
+  );
+}
+
+function gaugeColor(score: number): string {
+  if (score >= 90) return "#3ecf8e";
+  if (score >= 50) return "#e8b64a";
+  return "#ff6b6b";
+}
+
+function Gauge({ label, score }: { label: string; score: number | null }) {
+  const r = 40;
+  const circumference = 2 * Math.PI * r;
+  const pct = score ?? 0;
+  const offset = circumference - (pct / 100) * circumference;
+  const color = score === null ? "#5f5e5a" : gaugeColor(score);
+
+  return (
+    <div className="gauge">
+      <svg viewBox="0 0 100 100" width="88" height="88">
+        <circle cx="50" cy="50" r={r} fill="none" stroke="#232733" strokeWidth="8" />
+        {score !== null && (
+          <circle
+            cx="50"
+            cy="50"
+            r={r}
+            fill="none"
+            stroke={color}
+            strokeWidth="8"
+            strokeLinecap="round"
+            strokeDasharray={circumference}
+            strokeDashoffset={offset}
+            transform="rotate(-90 50 50)"
+          />
+        )}
+        <text x="50" y="56" textAnchor="middle" fontSize="26" fontWeight="600" fill={color}>
+          {score ?? "—"}
+        </text>
+      </svg>
+      <div className="gauge-label">{label}</div>
+    </div>
+  );
+}
+
+function AuditList({ title, items }: { title: string; items: AuditIssue[] }) {
+  if (items.length === 0) return null;
+  return (
+    <div className="audit-group">
+      <div className="audit-group-title">{title}</div>
+      <ul className="audit-list">
+        {items.map((a) => (
+          <li key={a.id} title={a.description}>{a.title}</li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+function StrategyRow({ label, result }: { label: string; result: PsiResult }) {
+  const d = result.detail;
+  return (
+    <div className="psi-strategy">
+      <div className="psi-strategy-label">{label}</div>
+      {result.error ? (
+        <div className="psi-strategy-error">{result.error}</div>
+      ) : (
+        <>
+          <div className="gauge-row">
+            <Gauge label="Performance" score={result.scores?.performance ?? null} />
+            <Gauge label="Accessibility" score={result.scores?.accessibility ?? null} />
+            <Gauge label="Best Practices" score={result.scores?.bestPractices ?? null} />
+            <Gauge label="SEO" score={result.scores?.seo ?? null} />
+          </div>
+
+          {d?.webVitals && d.webVitals.metrics.length > 0 && (
+            <div className="vitals-block">
+              <div className="vitals-heading">
+                Core Web Vitals <span className="vitals-source">({d.webVitals.source === "field" ? "real user data" : "lab estimate"})</span>
+              </div>
+              <div className="vitals-row">
+                {d.webVitals.metrics.map((v) => (
+                  <VitalPill key={v.label} vital={v} />
+                ))}
+              </div>
+            </div>
+          )}
+
+          {d && d.opportunities.length > 0 && (
+            <div className="opportunities-block">
+              <div className="audit-group-title">Top opportunities</div>
+              <ul className="opportunity-list">
+                {d.opportunities.map((o) => (
+                  <li key={o.id} title={o.description}>
+                    <span className="opportunity-title">{o.title}</span>
+                    <span className="opportunity-savings">{o.displaySavings}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {d && (
+            <div className="audit-groups">
+              <AuditList title="Accessibility issues" items={d.failedAudits.accessibility} />
+              <AuditList title="SEO issues" items={d.failedAudits.seo} />
+              <AuditList title="Best practices issues" items={d.failedAudits.bestPractices} />
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
 const CATEGORY_ORDER: Category[] = [
   "CMS",
   "Ecommerce",
@@ -41,6 +221,10 @@ export default function Home() {
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<ScanResponse | null>(null);
 
+  const [psiLoading, setPsiLoading] = useState(false);
+  const [psiError, setPsiError] = useState<string | null>(null);
+  const [psiResult, setPsiResult] = useState<PageSpeedResponse | null>(null);
+
   async function handleScan(e: React.FormEvent) {
     e.preventDefault();
     if (!url.trim() || loading) return;
@@ -48,6 +232,8 @@ export default function Home() {
     setLoading(true);
     setError(null);
     setResult(null);
+    setPsiResult(null);
+    setPsiError(null);
 
     try {
       const res = await fetch("/api/scan", {
@@ -65,6 +251,30 @@ export default function Home() {
       setError("Network error. Try again.");
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function handlePageSpeed() {
+    if (!result || psiLoading) return;
+    setPsiLoading(true);
+    setPsiError(null);
+
+    try {
+      const res = await fetch("/api/pagespeed", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url: result.finalUrl }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setPsiError(data.error ?? "PageSpeed diagnostics failed.");
+      } else {
+        setPsiResult(data);
+      }
+    } catch {
+      setPsiError("Network error. Try again.");
+    } finally {
+      setPsiLoading(false);
     }
   }
 
@@ -141,6 +351,29 @@ export default function Home() {
                 </div>
               </div>
             ))}
+          </div>
+
+          <div className="psi-section">
+            <div className="psi-header">
+              <h2>Diagnose performance issues</h2>
+              <button type="button" onClick={handlePageSpeed} disabled={psiLoading}>
+                {psiLoading ? "Running…" : psiResult ? "Re-run" : "Run diagnostics"}
+              </button>
+            </div>
+            <p className="psi-subtext">
+              Runs a real Lighthouse audit via Google PageSpeed Insights. Takes 10-30 seconds — it's a separate,
+              slower check from the instant scan above.
+            </p>
+
+            {psiLoading && <div className="loading">Running Lighthouse audits for mobile and desktop…</div>}
+            {psiError && <div className="error-banner">{psiError}</div>}
+
+            {psiResult && (
+              <div className="psi-results">
+                <StrategyRow label="Mobile" result={psiResult.mobile} />
+                <StrategyRow label="Desktop" result={psiResult.desktop} />
+              </div>
+            )}
           </div>
         </>
       )}
