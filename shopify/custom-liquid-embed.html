@@ -1,0 +1,169 @@
+<!--
+  StackScan — Shopify "Custom Liquid" embed.
+
+  Install (Online Store 2.0 themes):
+  1. Deploy the StackScan app to Vercel (see README.md) and set ALLOWED_ORIGINS
+     on that Vercel project to your storefront origin(s), e.g.
+     https://mystore.com,https://mystore.myshopify.com
+  2. Shopify Admin → Online Store → Themes → Customize.
+  3. Open the page you want it on → Add section (or Add block, inside an
+     existing section) → look for "Custom Liquid".
+  4. Paste this entire file's contents into that block.
+  5. Replace API_BASE below with your Vercel deployment URL. Save.
+
+  Everything is scoped under .stackscan-widget so it won't leak styles into
+  the rest of your theme. Colors are theme-adaptable via the CSS variables
+  at the top of the <style> block — tweak --ss-accent to match your brand.
+-->
+<div class="stackscan-widget">
+  <style>
+    .stackscan-widget {
+      --ss-accent: #1a1a1a;
+      --ss-accent-text: #ffffff;
+      --ss-border: #e2e2e2;
+      --ss-bg: #fafafa;
+      --ss-text: #1a1a1a;
+      --ss-text-muted: #6b6b6b;
+      --ss-radius: 8px;
+      font-family: inherit;
+      color: var(--ss-text);
+      max-width: 640px;
+      margin: 0 auto;
+    }
+    .stackscan-widget * { box-sizing: border-box; }
+    .stackscan-widget .ss-form {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 14px;
+    }
+    .stackscan-widget input[type="text"] {
+      flex: 1;
+      border: 1px solid var(--ss-border);
+      border-radius: var(--ss-radius);
+      padding: 12px 14px;
+      font-size: 15px;
+      font-family: inherit;
+    }
+    .stackscan-widget button {
+      background: var(--ss-accent);
+      color: var(--ss-accent-text);
+      border: none;
+      border-radius: var(--ss-radius);
+      padding: 12px 20px;
+      font-size: 15px;
+      font-weight: 600;
+      cursor: pointer;
+      font-family: inherit;
+    }
+    .stackscan-widget button:disabled { opacity: 0.6; cursor: not-allowed; }
+    .stackscan-widget .ss-status { font-size: 13px; color: var(--ss-text-muted); min-height: 18px; margin-bottom: 10px; }
+    .stackscan-widget .ss-error {
+      background: #fdecec; border: 1px solid #f3b8b8; color: #a12a2a;
+      border-radius: var(--ss-radius); padding: 10px 14px; font-size: 13px; margin-bottom: 14px;
+    }
+    .stackscan-widget .ss-results { display: flex; flex-direction: column; gap: 12px; }
+    .stackscan-widget .ss-card { background: var(--ss-bg); border: 1px solid var(--ss-border); border-radius: var(--ss-radius); padding: 14px 16px; }
+    .stackscan-widget .ss-cat { font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--ss-text-muted); margin: 0 0 10px; }
+    .stackscan-widget .ss-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+    .stackscan-widget .ss-chip {
+      display: inline-flex; align-items: center; gap: 6px; background: #fff;
+      border: 1px solid var(--ss-border); border-radius: 999px; padding: 6px 12px; font-size: 13px;
+    }
+    .stackscan-widget .ss-chip::before { content: ""; width: 6px; height: 6px; border-radius: 999px; background: #2fa86b; }
+  </style>
+
+  <div class="ss-form">
+    <input type="text" id="ss-url" placeholder="example.com" />
+    <button id="ss-go">Scan</button>
+  </div>
+  <div class="ss-status" id="ss-status"></div>
+  <div id="ss-error" style="display:none;" class="ss-error"></div>
+  <div class="ss-results" id="ss-results"></div>
+
+  <script>
+    (function () {
+      // Replace with your deployed StackScan API origin (no trailing slash).
+      var API_BASE = "https://YOUR-DEPLOYMENT.vercel.app";
+
+      var CATEGORY_ORDER = [
+        "CMS", "Ecommerce", "JS Framework", "CSS Framework", "Analytics",
+        "Tag Manager", "CDN / Hosting", "Web Server", "Payment", "Fonts",
+        "Chat / Support", "Email / Marketing"
+      ];
+
+      var input = document.getElementById("ss-url");
+      var button = document.getElementById("ss-go");
+      var status = document.getElementById("ss-status");
+      var errorBox = document.getElementById("ss-error");
+      var results = document.getElementById("ss-results");
+
+      function render(technologies) {
+        results.innerHTML = "";
+        var byCat = {};
+        technologies.forEach(function (t) {
+          (byCat[t.category] = byCat[t.category] || []).push(t.name);
+        });
+        CATEGORY_ORDER.forEach(function (cat) {
+          if (!byCat[cat]) return;
+          var card = document.createElement("div");
+          card.className = "ss-card";
+          var label = document.createElement("div");
+          label.className = "ss-cat";
+          label.textContent = cat;
+          card.appendChild(label);
+          var chips = document.createElement("div");
+          chips.className = "ss-chips";
+          byCat[cat].forEach(function (name) {
+            var chip = document.createElement("span");
+            chip.className = "ss-chip";
+            chip.textContent = name;
+            chips.appendChild(chip);
+          });
+          card.appendChild(chips);
+          results.appendChild(card);
+        });
+      }
+
+      function scan() {
+        var url = input.value.trim();
+        if (!url) return;
+        errorBox.style.display = "none";
+        results.innerHTML = "";
+        status.textContent = "Fetching the page and checking signatures…";
+        button.disabled = true;
+
+        fetch(API_BASE + "/api/scan", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ url: url })
+        })
+          .then(function (res) {
+            return res.json().then(function (data) { return { ok: res.ok, data: data }; });
+          })
+          .then(function (r) {
+            button.disabled = false;
+            if (!r.ok) {
+              status.textContent = "";
+              errorBox.textContent = r.data.error || "Scan failed.";
+              errorBox.style.display = "block";
+              return;
+            }
+            status.textContent = "Scanned " + r.data.finalUrl + " · HTTP " + r.data.statusCode +
+              " · " + r.data.technologies.length + " technologies detected";
+            render(r.data.technologies);
+          })
+          .catch(function () {
+            button.disabled = false;
+            status.textContent = "";
+            errorBox.textContent = "Network error — check API_BASE is set correctly and ALLOWED_ORIGINS includes this store's domain.";
+            errorBox.style.display = "block";
+          });
+      }
+
+      button.addEventListener("click", scan);
+      input.addEventListener("keydown", function (e) {
+        if (e.key === "Enter") scan();
+      });
+    })();
+  </script>
+</div>

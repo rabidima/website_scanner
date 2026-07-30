@@ -1,0 +1,21 @@
+<!--
+  StackScan — quick iframe embed.
+
+  Fastest way to get this on a Shopify page (2 minutes), at the cost of not
+  matching your theme's look — it renders StackScan's own UI in a frame.
+  No CORS/ALLOWED_ORIGINS setup needed for this path.
+
+  1. Deploy the app to Vercel (see README.md) and grab the URL, e.g.
+     https://stackscan-yourname.vercel.app
+  2. Shopify Admin → Online Store → Pages → your page → Content.
+     If your editor has a "Show HTML" (</>) toggle, use it and paste this.
+     If it strips iframes, use a "Custom Liquid" section instead (Online
+     Store 2.0 themes) and paste this same snippet there.
+  3. Replace the src URL below and save.
+-->
+<iframe
+  src="https://YOUR-DEPLOYMENT.vercel.app"
+  title="Technology stack scanner"
+  style="width: 100%; height: 820px; border: none; border-radius: 8px;"
+  loading="lazy"
+></iframe>
