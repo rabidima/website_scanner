@@ -266,9 +266,8 @@ export default function Home() {
   const [psiError, setPsiError] = useState<string | null>(null);
   const [psiResult, setPsiResult] = useState<PageSpeedResponse | null>(null);
 
-  async function handleScan(e: React.FormEvent) {
-    e.preventDefault();
-    if (!url.trim() || loading) return;
+  async function runScan(targetUrl: string) {
+    if (!targetUrl.trim() || loading) return;
 
     setLoading(true);
     setError(null);
@@ -280,7 +279,7 @@ export default function Home() {
       const res = await fetch("/api/scan", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url: url.trim() }),
+        body: JSON.stringify({ url: targetUrl.trim() }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -293,6 +292,11 @@ export default function Home() {
     } finally {
       setLoading(false);
     }
+  }
+
+  async function handleScan(e: React.FormEvent) {
+    e.preventDefault();
+    await runScan(url);
   }
 
   async function handlePageSpeed() {
@@ -347,7 +351,14 @@ export default function Home() {
         </button>
       </form>
 
-      {error && <div className="error-banner">{error}</div>}
+      {error && (
+        <div className="error-banner">
+          <div>{error}</div>
+          <button type="button" className="retry-btn" onClick={() => runScan(url)}>
+            Try re-running the test
+          </button>
+        </div>
+      )}
 
       {loading && <div className="loading">Fetching the page and checking signatures…</div>}
 
@@ -414,7 +425,14 @@ export default function Home() {
                 Running Lighthouse audits for mobile and desktop…
               </div>
             )}
-            {psiError && <div className="error-banner">{psiError}</div>}
+            {psiError && (
+              <div className="error-banner">
+                <div>{psiError}</div>
+                <button type="button" className="retry-btn" onClick={handlePageSpeed}>
+                  Try re-running the test
+                </button>
+              </div>
+            )}
 
             {psiResult && (
               <div className="psi-results">

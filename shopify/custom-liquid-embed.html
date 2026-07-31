@@ -88,6 +88,12 @@
       background: #fdecec; border: 1px solid #f3b8b8; color: #a12a2a;
       border-radius: var(--ss-radius); padding: 10px 14px; font-size: 13px; margin-bottom: 14px;
     }
+    .stackscan-widget .ss-retry-btn {
+      display: inline-flex; align-items: center; gap: 0; margin-top: 8px;
+      background: transparent; border: 1px solid #a12a2a; color: #a12a2a;
+      border-radius: var(--ss-radius); padding: 6px 12px; font-size: 12px; font-weight: 600; cursor: pointer;
+    }
+    .stackscan-widget .ss-retry-btn:hover { background: #fdecec; }
     .stackscan-widget .ss-page-info {
       background: var(--ss-bg); border: 1px solid var(--ss-border); border-radius: var(--ss-radius);
       padding: 12px 16px; margin-bottom: 14px; display: flex; flex-direction: column; gap: 8px;
@@ -95,7 +101,7 @@
     .stackscan-widget .ss-page-row { display: flex; gap: 10px; font-size: 13px; line-height: 1.5; }
     .stackscan-widget .ss-page-label {
       flex: 0 0 80px; color: var(--ss-text-muted); font-size: 11px; text-transform: uppercase;
-      letter-spacing: 0.05em; padding-top: 2px;
+      letter-spacing: 0.05em; padding-top: 2px; font-weight: 600;
     }
     .stackscan-widget .ss-page-value { flex: 1; word-break: break-word; }
     .stackscan-widget .ss-page-value em { color: var(--ss-text-muted); font-style: normal; }
@@ -121,7 +127,7 @@
     }
     .stackscan-widget .ss-results { display: flex; flex-direction: column; gap: 12px; }
     .stackscan-widget .ss-card { background: var(--ss-bg); border: 1px solid var(--ss-border); border-radius: var(--ss-radius); padding: 14px 16px; }
-    .stackscan-widget .ss-cat { font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--ss-text-muted); margin: 0 0 10px; }
+    .stackscan-widget .ss-cat { font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--ss-text-muted); margin: 0 0 10px; font-weight: 600; }
     .stackscan-widget .ss-chips { display: flex; flex-wrap: wrap; gap: 8px; }
     .stackscan-widget .ss-chip {
       display: inline-flex; align-items: center; gap: 6px; background: #fff;
@@ -129,24 +135,27 @@
     }
     .stackscan-widget .ss-chip::before { content: ""; width: 6px; height: 6px; border-radius: 999px; background: #2fa86b; }
     .stackscan-widget .ss-psi {
-      margin-top: 20px; padding-top: 18px; border-top: 1px solid var(--ss-border);
+      margin-top: 40px; padding-top: 20px; border-top: 1px solid #1b3c96;
     }
     .stackscan-widget .ss-psi-header { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
     .stackscan-widget .ss-psi-header h3 { font-size: 15px; margin: 0; font-weight: 600; }
     .stackscan-widget .ss-psi-sub { font-size: 12px; color: var(--ss-text-muted); margin: 6px 0 0; }
-    .stackscan-widget .ss-psi-results { margin-top: 16px; display: flex; flex-direction: column; gap: 16px; }
-    .stackscan-widget .ss-psi-strategy-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--ss-text-muted); margin-bottom: 8px; }
+    .stackscan-widget .ss-psi-results {
+      margin-top: 20px; display: flex; flex-direction: column; gap: 16px;
+      border: 1px solid #ddd; padding: 20px; border-radius: 10px;
+    }
+    .stackscan-widget .ss-psi-strategy-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--ss-text-muted); margin-bottom: 8px; font-weight: 600; }
     .stackscan-widget .ss-gauge-row { display: flex; gap: 20px; flex-wrap: wrap; }
     .stackscan-widget .ss-gauge { display: flex; flex-direction: column; align-items: center; gap: 4px; min-width: 84px; }
     .stackscan-widget .ss-gauge-label { font-size: 11px; color: var(--ss-text-muted); text-align: center; }
     .stackscan-widget .ss-vitals { margin-top: 14px; }
-    .stackscan-widget .ss-vitals-heading { font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--ss-text-muted); margin-bottom: 8px; }
+    .stackscan-widget .ss-vitals-heading { font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--ss-text-muted); margin-bottom: 8px; font-weight: 600; }
     .stackscan-widget .ss-vitals-source { text-transform: none; letter-spacing: normal; opacity: 0.8; }
     .stackscan-widget .ss-vitals-row { display: flex; gap: 8px; flex-wrap: wrap; }
     .stackscan-widget .ss-vital-pill { display: flex; align-items: baseline; gap: 6px; background: #fff; border: 1px solid; border-radius: 999px; padding: 5px 12px; font-size: 12px; }
     .stackscan-widget .ss-vital-label { color: var(--ss-text-muted); font-weight: 600; font-size: 10px; }
     .stackscan-widget .ss-opp-block { margin-top: 14px; }
-    .stackscan-widget .ss-audit-group-title { font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--ss-text-muted); margin-bottom: 6px; }
+    .stackscan-widget .ss-audit-group-title { font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--ss-text-muted); margin-bottom: 6px; font-weight: 600; color: #ff0000 !important; }
     .stackscan-widget .ss-opp-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 5px; }
     .stackscan-widget .ss-opp-list li { display: flex; justify-content: space-between; gap: 10px; font-size: 12px; background: #fff; border-radius: 6px; padding: 6px 10px; }
     .stackscan-widget .ss-opp-savings { color: var(--ss-text-muted); white-space: nowrap; }
@@ -351,6 +360,20 @@
         container.appendChild(wrap);
       }
 
+      function showError(box, message, retryFn) {
+        box.innerHTML = "";
+        var msg = document.createElement("div");
+        msg.textContent = message;
+        box.appendChild(msg);
+        var retry = document.createElement("button");
+        retry.type = "button";
+        retry.className = "ss-retry-btn";
+        retry.textContent = "Try re-running the test";
+        retry.addEventListener("click", retryFn);
+        box.appendChild(retry);
+        box.style.display = "block";
+      }
+
       function setPsiButtonLoading(isLoading, label) {
         psiGoButton.disabled = isLoading;
         psiGoButton.innerHTML = "";
@@ -387,8 +410,7 @@
             setPsiButtonLoading(false, "Re-run");
             if (!r.ok) {
               psiStatus.textContent = "";
-              psiErrorBox.textContent = r.data.error || "PageSpeed diagnostics failed.";
-              psiErrorBox.style.display = "block";
+              showError(psiErrorBox, r.data.error || "PageSpeed diagnostics failed.", runPageSpeed);
               return;
             }
             psiStatus.textContent = "";
@@ -398,8 +420,7 @@
           .catch(function () {
             setPsiButtonLoading(false, "Re-run");
             psiStatus.textContent = "";
-            psiErrorBox.textContent = "Network error — check ALLOWED_ORIGINS includes this store's domain.";
-            psiErrorBox.style.display = "block";
+            showError(psiErrorBox, "Network error — check ALLOWED_ORIGINS includes this store's domain.", runPageSpeed);
           });
       }
 
@@ -545,8 +566,7 @@
             button.disabled = false;
             if (!r.ok) {
               status.textContent = "";
-              errorBox.textContent = r.data.error || "Scan failed.";
-              errorBox.style.display = "block";
+              showError(errorBox, r.data.error || "Scan failed.", scan);
               return;
             }
             status.textContent = "Scanned " + r.data.finalUrl + " · HTTP " + r.data.statusCode +
@@ -561,8 +581,7 @@
           .catch(function () {
             button.disabled = false;
             status.textContent = "";
-            errorBox.textContent = "Network error — check API_BASE is set correctly and ALLOWED_ORIGINS includes this store's domain.";
-            errorBox.style.display = "block";
+            showError(errorBox, "Network error — check API_BASE is set correctly and ALLOWED_ORIGINS includes this store's domain.", scan);
           });
       }
 

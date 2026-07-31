@@ -109,6 +109,23 @@ body {
   text-align: center;
 }
 
+.retry-btn {
+  display: inline-block;
+  margin-top: 10px;
+  background: transparent;
+  border: 1px solid var(--danger);
+  color: var(--danger);
+  border-radius: var(--radius);
+  padding: 7px 14px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.retry-btn:hover {
+  background: rgba(255, 107, 107, 0.08);
+}
+
 .summary {
   max-width: 620px;
   margin: 24px auto 0;
