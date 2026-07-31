@@ -50,6 +50,9 @@
       font-family: inherit;
     }
     .stackscan-widget button {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
       background: var(--ss-accent);
       color: var(--ss-accent-text);
       border: none;
@@ -61,6 +64,25 @@
       font-family: inherit;
     }
     .stackscan-widget button:disabled { opacity: 0.6; cursor: not-allowed; }
+    .stackscan-widget .ss-spinner {
+      display: inline-block;
+      width: 14px;
+      height: 14px;
+      border: 2px solid rgba(255, 255, 255, 0.35);
+      border-top-color: #fff;
+      border-radius: 50%;
+      animation: ss-spin 0.7s linear infinite;
+      flex-shrink: 0;
+    }
+    .stackscan-widget .ss-status .ss-spinner {
+      width: 12px;
+      height: 12px;
+      border: 2px solid var(--ss-border);
+      border-top-color: var(--ss-accent);
+      margin-right: 6px;
+      vertical-align: -1px;
+    }
+    @keyframes ss-spin { to { transform: rotate(360deg); } }
     .stackscan-widget .ss-status { font-size: 13px; color: var(--ss-text-muted); min-height: 18px; margin-bottom: 10px; }
     .stackscan-widget .ss-error {
       background: #fdecec; border: 1px solid #f3b8b8; color: #a12a2a;
@@ -149,7 +171,7 @@
       <h3>Diagnose performance issues</h3>
       <button id="ss-psi-go" type="button">Run diagnostics</button>
     </div>
-    <p class="ss-psi-sub">Runs a real Lighthouse audit (Google PageSpeed Insights). Takes 10-30 seconds.</p>
+    <p class="ss-psi-sub">Runs a Google PageSpeed Insights (Lighthouse Audit). Takes 10-30 seconds.</p>
     <div class="ss-status" id="ss-psi-status"></div>
     <div id="ss-psi-error" style="display:none;" class="ss-error"></div>
     <div class="ss-psi-results" id="ss-psi-results"></div>
@@ -329,12 +351,29 @@
         container.appendChild(wrap);
       }
 
+      function setPsiButtonLoading(isLoading, label) {
+        psiGoButton.disabled = isLoading;
+        psiGoButton.innerHTML = "";
+        if (isLoading) {
+          var spin = document.createElement("span");
+          spin.className = "ss-spinner";
+          psiGoButton.appendChild(spin);
+          psiGoButton.appendChild(document.createTextNode("Running…"));
+        } else {
+          psiGoButton.textContent = label;
+        }
+      }
+
       function runPageSpeed() {
         if (!lastScannedUrl) return;
         psiErrorBox.style.display = "none";
         psiResults.innerHTML = "";
-        psiStatus.textContent = "Running Lighthouse audits for mobile and desktop…";
-        psiGoButton.disabled = true;
+        psiStatus.innerHTML = "";
+        var spin = document.createElement("span");
+        spin.className = "ss-spinner";
+        psiStatus.appendChild(spin);
+        psiStatus.appendChild(document.createTextNode("Running Lighthouse audits for mobile and desktop…"));
+        setPsiButtonLoading(true);
 
         fetch(API_BASE + "/api/pagespeed", {
           method: "POST",
@@ -345,8 +384,7 @@
             return res.json().then(function (data) { return { ok: res.ok, data: data }; });
           })
           .then(function (r) {
-            psiGoButton.disabled = false;
-            psiGoButton.textContent = "Re-run";
+            setPsiButtonLoading(false, "Re-run");
             if (!r.ok) {
               psiStatus.textContent = "";
               psiErrorBox.textContent = r.data.error || "PageSpeed diagnostics failed.";
@@ -358,7 +396,7 @@
             renderStrategy(psiResults, "Desktop", r.data.desktop);
           })
           .catch(function () {
-            psiGoButton.disabled = false;
+            setPsiButtonLoading(false, "Re-run");
             psiStatus.textContent = "";
             psiErrorBox.textContent = "Network error — check ALLOWED_ORIGINS includes this store's domain.";
             psiErrorBox.style.display = "block";

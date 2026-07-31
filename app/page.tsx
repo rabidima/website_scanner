@@ -400,15 +400,20 @@ export default function Home() {
             <div className="psi-header">
               <h2>Diagnose performance issues</h2>
               <button type="button" onClick={handlePageSpeed} disabled={psiLoading}>
+                {psiLoading && <span className="spinner spinner-inline" aria-hidden="true" />}
                 {psiLoading ? "Running…" : psiResult ? "Re-run" : "Run diagnostics"}
               </button>
             </div>
             <p className="psi-subtext">
-              Runs a real Lighthouse audit via Google PageSpeed Insights. Takes 10-30 seconds — it's a separate,
-              slower check from the instant scan above.
+              Runs a Google PageSpeed Insights (Lighthouse Audit). Takes 10-30 seconds.
             </p>
 
-            {psiLoading && <div className="loading">Running Lighthouse audits for mobile and desktop…</div>}
+            {psiLoading && (
+              <div className="loading">
+                <span className="spinner" aria-hidden="true" />
+                Running Lighthouse audits for mobile and desktop…
+              </div>
+            )}
             {psiError && <div className="error-banner">{psiError}</div>}
 
             {psiResult && (
