@@ -3,6 +3,7 @@ import { fetchSiteSafely } from "@/lib/fetch-site";
 import { detectTechnologies } from "@/lib/detect";
 import { resolveCorsOrigin, corsHeaders } from "@/lib/cors";
 import { extractPageInfo } from "@/lib/extract-meta";
+import { checkLlmsTxt } from "@/lib/llms-txt";
 
 // This route resolves DNS and streams a raw fetch response, which needs the
 // full Node.js runtime (not the Edge runtime).
@@ -72,6 +73,10 @@ export async function POST(req: NextRequest) {
       finalUrl: result.finalUrl,
     });
     const page = extractPageInfo(result.html);
+    // llms.txt lives at the domain root regardless of which page was
+    // scanned, and its own check never throws (failures just come back as
+    // "not found") — safe to await inline without its own try/catch.
+    const llmsTxt = await checkLlmsTxt(result.finalUrl);
 
     return json(
       {
@@ -81,6 +86,7 @@ export async function POST(req: NextRequest) {
         scannedAt: new Date().toISOString(),
         technologies,
         page,
+        llmsTxt,
         meta: {
           server: result.headers["server"] ?? null,
           poweredBy: result.headers["x-powered-by"] ?? null,

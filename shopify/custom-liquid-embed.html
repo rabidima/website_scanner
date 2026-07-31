@@ -77,6 +77,26 @@
     }
     .stackscan-widget .ss-page-value { flex: 1; word-break: break-word; }
     .stackscan-widget .ss-page-value em { color: var(--ss-text-muted); font-style: normal; }
+    .stackscan-widget .ss-llms-card {
+      background: var(--ss-bg); border: 1px solid var(--ss-border); border-radius: var(--ss-radius);
+      padding: 12px 16px; margin-bottom: 14px;
+    }
+    .stackscan-widget .ss-llms-header { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+    .stackscan-widget .ss-llms-header h4 { font-size: 13px; margin: 0; font-weight: 600; }
+    .stackscan-widget .ss-llms-actions { display: flex; align-items: center; gap: 12px; }
+    .stackscan-widget .ss-llms-actions a { color: var(--ss-accent); font-size: 12px; text-decoration: none; }
+    .stackscan-widget .ss-llms-actions a:hover { text-decoration: underline; }
+    .stackscan-widget .ss-llms-actions button {
+      background: transparent; border: 1px solid var(--ss-border); border-radius: var(--ss-radius);
+      color: var(--ss-text); font-size: 11px; padding: 4px 10px; cursor: pointer;
+    }
+    .stackscan-widget .ss-llms-empty { color: var(--ss-text-muted); font-size: 13px; margin: 8px 0 0; }
+    .stackscan-widget .ss-llms-truncated { color: var(--ss-text-muted); font-size: 11px; margin: 8px 0 0; }
+    .stackscan-widget .ss-llms-content {
+      margin: 10px 0 0; padding: 10px 12px; background: #ffffff; border: 1px solid var(--ss-border);
+      border-radius: 6px; font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: 11.5px;
+      line-height: 1.6; white-space: pre-wrap; word-break: break-word; max-height: 320px; overflow-y: auto;
+    }
     .stackscan-widget .ss-results { display: flex; flex-direction: column; gap: 12px; }
     .stackscan-widget .ss-card { background: var(--ss-bg); border: 1px solid var(--ss-border); border-radius: var(--ss-radius); padding: 14px 16px; }
     .stackscan-widget .ss-cat { font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--ss-text-muted); margin: 0 0 10px; }
@@ -121,6 +141,7 @@
   <div class="ss-status" id="ss-status"></div>
   <div id="ss-error" style="display:none;" class="ss-error"></div>
   <div class="ss-page-info" id="ss-page-info" style="display:none;"></div>
+  <div id="ss-llms" style="display:none;"></div>
   <div class="ss-results" id="ss-results"></div>
 
   <div class="ss-psi" id="ss-psi" style="display:none;">
@@ -154,6 +175,7 @@
       var status = document.getElementById("ss-status");
       var errorBox = document.getElementById("ss-error");
       var pageInfo = document.getElementById("ss-page-info");
+      var llmsBox = document.getElementById("ss-llms");
       var results = document.getElementById("ss-results");
       var psiSection = document.getElementById("ss-psi");
       var psiGoButton = document.getElementById("ss-psi-go");
@@ -370,6 +392,69 @@
         pageInfo.style.display = "flex";
       }
 
+      function renderLlmsTxt(llmsTxt) {
+        llmsBox.innerHTML = "";
+        var card = document.createElement("div");
+        card.className = "ss-llms-card";
+
+        if (!llmsTxt || !llmsTxt.found) {
+          var header0 = document.createElement("div");
+          header0.className = "ss-llms-header";
+          header0.innerHTML = "<h4>llms.txt</h4>";
+          card.appendChild(header0);
+          var empty = document.createElement("p");
+          empty.className = "ss-llms-empty";
+          empty.textContent = "No llms.txt found at the domain root.";
+          card.appendChild(empty);
+          llmsBox.appendChild(card);
+          llmsBox.style.display = "block";
+          return;
+        }
+
+        var expanded = true;
+        var header = document.createElement("div");
+        header.className = "ss-llms-header";
+        var title = document.createElement("h4");
+        title.textContent = "llms.txt";
+        header.appendChild(title);
+
+        var actions = document.createElement("div");
+        actions.className = "ss-llms-actions";
+        var link = document.createElement("a");
+        link.href = llmsTxt.url;
+        link.target = "_blank";
+        link.rel = "noopener noreferrer";
+        link.textContent = "View raw";
+        actions.appendChild(link);
+        var toggle = document.createElement("button");
+        toggle.type = "button";
+        toggle.textContent = "Collapse";
+        actions.appendChild(toggle);
+        header.appendChild(actions);
+        card.appendChild(header);
+
+        if (llmsTxt.truncated) {
+          var trunc = document.createElement("p");
+          trunc.className = "ss-llms-truncated";
+          trunc.textContent = "Showing the first 20,000 characters — the file is longer than that.";
+          card.appendChild(trunc);
+        }
+
+        var pre = document.createElement("pre");
+        pre.className = "ss-llms-content";
+        pre.textContent = llmsTxt.content;
+        card.appendChild(pre);
+
+        toggle.addEventListener("click", function () {
+          expanded = !expanded;
+          pre.style.display = expanded ? "block" : "none";
+          toggle.textContent = expanded ? "Collapse" : "Expand";
+        });
+
+        llmsBox.appendChild(card);
+        llmsBox.style.display = "block";
+      }
+
       function render(technologies) {
         results.innerHTML = "";
         var byCat = {};
@@ -402,6 +487,8 @@
         if (!url) return;
         errorBox.style.display = "none";
         pageInfo.style.display = "none";
+        llmsBox.style.display = "none";
+        llmsBox.innerHTML = "";
         results.innerHTML = "";
         psiSection.style.display = "none";
         psiResults.innerHTML = "";
@@ -427,6 +514,7 @@
             status.textContent = "Scanned " + r.data.finalUrl + " · HTTP " + r.data.statusCode +
               " · " + r.data.technologies.length + " technologies detected";
             if (r.data.page) renderPageInfo(r.data.page);
+            renderLlmsTxt(r.data.llmsTxt);
             render(r.data.technologies);
             lastScannedUrl = r.data.finalUrl;
             psiGoButton.textContent = "Run diagnostics";

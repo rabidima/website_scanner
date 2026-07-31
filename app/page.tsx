@@ -9,6 +9,13 @@ interface PageInfo {
   h1: string | null;
 }
 
+interface LlmsTxt {
+  found: boolean;
+  url: string;
+  content: string | null;
+  truncated: boolean;
+}
+
 interface ScanResponse {
   requestedUrl: string;
   finalUrl: string;
@@ -16,6 +23,7 @@ interface ScanResponse {
   scannedAt: string;
   technologies: Technology[];
   page: PageInfo;
+  llmsTxt: LlmsTxt;
   meta: { server: string | null; poweredBy: string | null };
 }
 
@@ -139,6 +147,39 @@ function AuditList({ title, items }: { title: string; items: AuditIssue[] }) {
           <li key={a.id} title={a.description}>{a.title}</li>
         ))}
       </ul>
+    </div>
+  );
+}
+
+function LlmsTxtCard({ llmsTxt }: { llmsTxt: LlmsTxt }) {
+  const [expanded, setExpanded] = useState(true);
+
+  if (!llmsTxt.found) {
+    return (
+      <div className="llms-txt-card">
+        <div className="llms-txt-header">
+          <h2>llms.txt</h2>
+        </div>
+        <p className="llms-txt-empty">No llms.txt found at the domain root.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="llms-txt-card">
+      <div className="llms-txt-header">
+        <h2>llms.txt</h2>
+        <div className="llms-txt-actions">
+          <a href={llmsTxt.url} target="_blank" rel="noopener noreferrer">View raw</a>
+          <button type="button" onClick={() => setExpanded((v) => !v)}>
+            {expanded ? "Collapse" : "Expand"}
+          </button>
+        </div>
+      </div>
+      {llmsTxt.truncated && (
+        <p className="llms-txt-truncated">Showing the first 20,000 characters — the file is longer than that.</p>
+      )}
+      {expanded && <pre className="llms-txt-content">{llmsTxt.content}</pre>}
     </div>
   );
 }
@@ -331,6 +372,8 @@ export default function Home() {
               <span className="page-info-value">{result.page.h1 ?? <em>Not found</em>}</span>
             </div>
           </div>
+
+          <LlmsTxtCard llmsTxt={result.llmsTxt} />
 
           <div className="results">
             {grouped.length === 0 && (

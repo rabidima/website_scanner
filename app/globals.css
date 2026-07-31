@@ -164,6 +164,83 @@ body {
   font-style: normal;
 }
 
+.llms-txt-card {
+  max-width: 620px;
+  margin: 16px auto 0;
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius);
+  padding: 16px 20px;
+}
+
+.llms-txt-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.llms-txt-header h2 {
+  font-size: 1rem;
+  margin: 0;
+  font-weight: 600;
+}
+
+.llms-txt-actions {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.llms-txt-actions a {
+  color: var(--accent);
+  font-size: 0.85rem;
+  text-decoration: none;
+}
+
+.llms-txt-actions a:hover {
+  text-decoration: underline;
+}
+
+.llms-txt-actions button {
+  background: transparent;
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius);
+  color: var(--text);
+  font-size: 0.8rem;
+  padding: 5px 12px;
+  cursor: pointer;
+}
+
+.llms-txt-empty {
+  color: var(--text-dim);
+  font-size: 0.9rem;
+  margin: 10px 0 0;
+}
+
+.llms-txt-truncated {
+  color: var(--text-dim);
+  font-size: 0.8rem;
+  margin: 10px 0 0;
+}
+
+.llms-txt-content {
+  margin: 14px 0 0;
+  padding: 14px 16px;
+  background: #0d0f14;
+  border: 1px solid var(--panel-border);
+  border-radius: 8px;
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 0.82rem;
+  line-height: 1.6;
+  color: var(--text);
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 420px;
+  overflow-y: auto;
+}
+
 .results {
   margin-top: 24px;
   display: flex;
