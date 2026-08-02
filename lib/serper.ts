@@ -20,6 +20,32 @@ export interface OrganicResult {
   snippet: string | null;
 }
 
+export interface KnowledgeGraphResult {
+  title: string | null;
+  type: string | null;
+  website: string | null;
+  description: string | null;
+  imageUrl: string | null;
+  attributes: Record<string, string> | null;
+}
+
+export interface AnswerBoxResult {
+  title: string | null;
+  answer: string | null;
+  link: string | null;
+}
+
+export interface AiOverviewSource {
+  title: string | null;
+  link: string | null;
+}
+
+export interface AiOverviewResult {
+  text: string | null;
+  sources: AiOverviewSource[];
+  domainCited: boolean; // true if the scanned domain appears among the AI Overview's cited sources
+}
+
 export interface SeoRankResult {
   keyword: string;
   domain: string;
@@ -28,6 +54,9 @@ export interface SeoRankResult {
   topResults: OrganicResult[];
   relatedSearches: string[];
   peopleAlsoAsk: string[];
+  knowledgeGraph: KnowledgeGraphResult | null;
+  answerBox: AnswerBoxResult | null;
+  aiOverview: AiOverviewResult | null;
 }
 
 export class SerperError extends Error {
@@ -40,6 +69,59 @@ function hostnameOf(url: string): string {
   } catch {
     return "";
   }
+}
+
+// Serper's optional SERP-feature fields. Not every query returns these, and
+// the exact shape can drift slightly between Serper API versions, so parsing
+// here is defensive: unknown/missing sub-fields fall back to null rather than
+// throwing, and a few plausible key-name variants are checked.
+function parseKnowledgeGraph(kg: any): KnowledgeGraphResult | null {
+  if (!kg || typeof kg !== "object") return null;
+  const title = kg.title ?? null;
+  if (!title) return null;
+  return {
+    title,
+    type: kg.type ?? null,
+    website: kg.website ?? kg.url ?? null,
+    description: kg.description ?? null,
+    imageUrl: kg.imageUrl ?? kg.image ?? null,
+    attributes: kg.attributes && typeof kg.attributes === "object" ? kg.attributes : null,
+  };
+}
+
+function parseAnswerBox(ab: any): AnswerBoxResult | null {
+  if (!ab || typeof ab !== "object") return null;
+  const answer: string | null = ab.answer ?? ab.snippet ?? null;
+  const title: string | null = ab.title ?? null;
+  if (!answer && !title) return null;
+  return {
+    title,
+    answer,
+    link: ab.link ?? null,
+  };
+}
+
+function parseAiOverview(ai: any, domain: string): AiOverviewResult | null {
+  if (!ai || typeof ai !== "object") return null;
+  const text: string | null = ai.text ?? ai.content ?? ai.answer ?? null;
+  const rawSources: any[] = Array.isArray(ai.sources)
+    ? ai.sources
+    : Array.isArray(ai.references)
+      ? ai.references
+      : [];
+  const sources: AiOverviewSource[] = rawSources
+    .map((s: any): AiOverviewSource => {
+      if (typeof s === "string") return { title: null, link: s };
+      return { title: s?.title ?? null, link: s?.link ?? s?.url ?? null };
+    })
+    .filter((s: AiOverviewSource): boolean => Boolean(s.link));
+
+  if (!text && sources.length === 0) return null;
+
+  const targetHost = domain.replace(/^https?:\/\//i, "").replace(/^www\./i, "").split("/")[0].toLowerCase();
+  const domainCited = sources.some((s) => s.link && hostnameOf(s.link).includes(targetHost));
+
+  return { text, sources, domainCited };
 }
 
 export async function checkSeoRank(keyword: string, domain: string, apiKey: string): Promise<SeoRankResult> {
@@ -91,6 +173,10 @@ export async function checkSeoRank(keyword: string, domain: string, apiKey: stri
     ? data.peopleAlsoAsk.map((r: any) => r.question).filter(Boolean)
     : [];
 
+  const knowledgeGraph = parseKnowledgeGraph(data.knowledgeGraph);
+  const answerBox = parseAnswerBox(data.answerBox);
+  const aiOverview = parseAiOverview(data.aiOverview, domain);
+
   return {
     keyword,
     domain,
@@ -99,5 +185,8 @@ export async function checkSeoRank(keyword: string, domain: string, apiKey: stri
     topResults,
     relatedSearches,
     peopleAlsoAsk,
+    knowledgeGraph,
+    answerBox,
+    aiOverview,
   };
 }

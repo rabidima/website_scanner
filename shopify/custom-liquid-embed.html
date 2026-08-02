@@ -192,12 +192,35 @@
     .stackscan-widget .ss-ai-chip a { color: inherit; margin-left: 2px; }
     .stackscan-widget .ss-seo-results { margin-top: 16px; display: flex; flex-direction: column; gap: 14px; }
     .stackscan-widget .ss-seo-rank-badge { font-size: 14px; }
-    .stackscan-widget .ss-seo-organic-list { margin: 8px 0 0; padding-left: 18px; font-size: 13px; display: flex; flex-direction: column; gap: 5px; }
+    .stackscan-widget .ss-seo-organic-list { margin: 8px 0 0; padding-left: 18px; font-size: 13px; display: flex; flex-direction: column; gap: 10px; }
+    .stackscan-widget .ss-seo-organic-list li { display: flex; flex-direction: column; }
     .stackscan-widget .ss-seo-organic-list a { color: var(--ss-accent); }
     .stackscan-widget .ss-seo-organic-list li.ss-matched { font-weight: 700; }
     .stackscan-widget .ss-seo-organic-list li.ss-matched a { color: #1f7a4f; }
+    .stackscan-widget .ss-seo-organic-url { color: var(--ss-text-muted); font-size: 11px; word-break: break-all; font-weight: 400; }
     .stackscan-widget .ss-seo-chip-row { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
     .stackscan-widget .ss-seo-idea-chip { background: var(--ss-bg); border: 1px solid var(--ss-border); border-radius: 999px; padding: 5px 10px; font-size: 11px; color: var(--ss-text-muted); }
+    .stackscan-widget .ss-seo-kg-card { display: flex; gap: 12px; background: var(--ss-bg); border: 1px solid var(--ss-border); border-radius: var(--ss-radius); padding: 12px 14px; }
+    .stackscan-widget .ss-seo-kg-image { width: 56px; height: 56px; border-radius: 6px; object-fit: cover; flex-shrink: 0; }
+    .stackscan-widget .ss-seo-kg-body { min-width: 0; }
+    .stackscan-widget .ss-seo-kg-title { font-weight: 700; font-size: 13px; color: var(--ss-text); }
+    .stackscan-widget .ss-seo-kg-type { color: var(--ss-text-muted); font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; margin: 2px 0 6px; }
+    .stackscan-widget .ss-seo-kg-desc { font-size: 12px; color: var(--ss-text); margin: 0 0 6px; }
+    .stackscan-widget .ss-seo-kg-website { color: var(--ss-accent); font-size: 12px; text-decoration: none; word-break: break-all; }
+    .stackscan-widget .ss-seo-kg-website:hover { text-decoration: underline; }
+    .stackscan-widget .ss-seo-kg-attrs { margin-top: 6px; display: flex; flex-direction: column; gap: 2px; font-size: 11px; color: var(--ss-text-muted); }
+    .stackscan-widget .ss-seo-kg-attr strong { color: var(--ss-text); font-weight: 700; }
+    .stackscan-widget .ss-seo-answerbox { background: var(--ss-bg); border: 1px solid var(--ss-border); border-radius: var(--ss-radius); padding: 12px 14px; }
+    .stackscan-widget .ss-seo-answerbox-title { font-weight: 700; font-size: 12px; color: var(--ss-text); margin-bottom: 4px; }
+    .stackscan-widget .ss-seo-answerbox-text { font-size: 12px; color: var(--ss-text); margin: 0 0 6px; }
+    .stackscan-widget .ss-seo-ai-overview { background: var(--ss-bg); border: 1px solid var(--ss-border); border-radius: var(--ss-radius); padding: 12px 14px; }
+    .stackscan-widget .ss-seo-ai-cited-badge { margin-left: 8px; font-size: 10px; font-weight: 700; text-transform: none; letter-spacing: normal; padding: 2px 8px; border-radius: 999px; }
+    .stackscan-widget .ss-seo-ai-cited-badge.ss-cited { background: rgba(47, 168, 107, 0.15); color: #1f7a4f; }
+    .stackscan-widget .ss-seo-ai-cited-badge.ss-not-cited { background: rgba(209, 68, 63, 0.12); color: #a12a2a; }
+    .stackscan-widget .ss-seo-ai-overview-text { font-size: 12px; color: var(--ss-text); margin: 8px 0; }
+    .stackscan-widget .ss-seo-ai-overview-sources { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+    .stackscan-widget .ss-seo-ai-source-chip { background: #fff; border: 1px solid var(--ss-border); border-radius: 999px; padding: 4px 10px; font-size: 11px; color: var(--ss-accent); text-decoration: none; }
+    .stackscan-widget .ss-seo-ai-source-chip:hover { text-decoration: underline; }
   </style>
 
   <div class="ss-form">
@@ -621,6 +644,126 @@
         }
         seoResultsBox.appendChild(badge);
 
+        if (data.knowledgeGraph) {
+          var kg = data.knowledgeGraph;
+          var kgCard = document.createElement("div");
+          kgCard.className = "ss-seo-kg-card";
+          if (kg.imageUrl) {
+            var kgImg = document.createElement("img");
+            kgImg.className = "ss-seo-kg-image";
+            kgImg.src = kg.imageUrl;
+            kgImg.alt = "";
+            kgCard.appendChild(kgImg);
+          }
+          var kgBody = document.createElement("div");
+          kgBody.className = "ss-seo-kg-body";
+          var kgTitle = document.createElement("div");
+          kgTitle.className = "ss-seo-kg-title";
+          kgTitle.textContent = kg.title || "";
+          kgBody.appendChild(kgTitle);
+          if (kg.type) {
+            var kgType = document.createElement("div");
+            kgType.className = "ss-seo-kg-type";
+            kgType.textContent = kg.type;
+            kgBody.appendChild(kgType);
+          }
+          if (kg.description) {
+            var kgDesc = document.createElement("p");
+            kgDesc.className = "ss-seo-kg-desc";
+            kgDesc.textContent = kg.description;
+            kgBody.appendChild(kgDesc);
+          }
+          if (kg.website) {
+            var kgSite = document.createElement("a");
+            kgSite.className = "ss-seo-kg-website";
+            kgSite.href = kg.website;
+            kgSite.target = "_blank";
+            kgSite.rel = "noopener noreferrer";
+            kgSite.textContent = kg.website;
+            kgBody.appendChild(kgSite);
+          }
+          if (kg.attributes) {
+            var kgAttrs = document.createElement("div");
+            kgAttrs.className = "ss-seo-kg-attrs";
+            Object.keys(kg.attributes).forEach(function (k) {
+              var attr = document.createElement("span");
+              attr.className = "ss-seo-kg-attr";
+              attr.innerHTML = "<strong>" + k + ":</strong> ";
+              attr.appendChild(document.createTextNode(kg.attributes[k]));
+              kgAttrs.appendChild(attr);
+            });
+            kgBody.appendChild(kgAttrs);
+          }
+          kgCard.appendChild(kgBody);
+          seoResultsBox.appendChild(kgCard);
+        }
+
+        if (data.answerBox) {
+          var ab = data.answerBox;
+          var abBox = document.createElement("div");
+          abBox.className = "ss-seo-answerbox";
+          var abTitle2 = document.createElement("div");
+          abTitle2.className = "ss-audit-group-title";
+          abTitle2.textContent = "Featured snippet (Answer Box)";
+          abBox.appendChild(abTitle2);
+          if (ab.title) {
+            var abHeading = document.createElement("div");
+            abHeading.className = "ss-seo-answerbox-title";
+            abHeading.textContent = ab.title;
+            abBox.appendChild(abHeading);
+          }
+          if (ab.answer) {
+            var abText = document.createElement("p");
+            abText.className = "ss-seo-answerbox-text";
+            abText.textContent = ab.answer;
+            abBox.appendChild(abText);
+          }
+          if (ab.link) {
+            var abLink = document.createElement("a");
+            abLink.href = ab.link;
+            abLink.target = "_blank";
+            abLink.rel = "noopener noreferrer";
+            abLink.textContent = ab.link;
+            abBox.appendChild(abLink);
+          }
+          seoResultsBox.appendChild(abBox);
+        }
+
+        if (data.aiOverview) {
+          var ai = data.aiOverview;
+          var aiBox = document.createElement("div");
+          aiBox.className = "ss-seo-ai-overview";
+          var aiTitle = document.createElement("div");
+          aiTitle.className = "ss-audit-group-title";
+          aiTitle.textContent = "Google AI Overview";
+          var aiBadge = document.createElement("span");
+          aiBadge.className = "ss-seo-ai-cited-badge " + (ai.domainCited ? "ss-cited" : "ss-not-cited");
+          aiBadge.textContent = ai.domainCited ? "Your domain is cited" : "Not cited";
+          aiTitle.appendChild(aiBadge);
+          aiBox.appendChild(aiTitle);
+          if (ai.text) {
+            var aiText = document.createElement("p");
+            aiText.className = "ss-seo-ai-overview-text";
+            aiText.textContent = ai.text;
+            aiBox.appendChild(aiText);
+          }
+          if (ai.sources && ai.sources.length > 0) {
+            var aiSources = document.createElement("div");
+            aiSources.className = "ss-seo-ai-overview-sources";
+            ai.sources.forEach(function (s) {
+              var chip = document.createElement("a");
+              chip.className = "ss-seo-ai-source-chip";
+              chip.href = s.link || "#";
+              chip.target = "_blank";
+              chip.rel = "noopener noreferrer";
+              chip.textContent = s.title || s.link;
+              aiSources.appendChild(chip);
+            });
+            aiBox.appendChild(aiSources);
+          }
+          seoResultsBox.appendChild(aiBox);
+        }
+
         if (data.topResults && data.topResults.length > 0) {
           var orgTitle = document.createElement("div");
           orgTitle.className = "ss-audit-group-title";
@@ -637,6 +780,10 @@
             a.rel = "noopener noreferrer";
             a.textContent = r.title || r.link;
             li.appendChild(a);
+            var urlLine = document.createElement("span");
+            urlLine.className = "ss-seo-organic-url";
+            urlLine.textContent = r.link;
+            li.appendChild(urlLine);
             list.appendChild(li);
           });
           seoResultsBox.appendChild(list);

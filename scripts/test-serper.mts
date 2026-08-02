@@ -71,6 +71,78 @@ async function run() {
   }
   check("429 surfaces a rate-limit message", rateError instanceof SerperError && /rate limit|credit/i.test((rateError as SerperError).message));
 
+  // Case 5: Knowledge Graph, Answer Box, and AI Overview all present, and the
+  // scanned domain is one of the AI Overview's cited sources.
+  mockFetch(async () =>
+    new Response(
+      JSON.stringify({
+        organic: [{ position: 1, title: "Acme Candles", link: "https://acmecandles.com/" }],
+        knowledgeGraph: {
+          title: "Acme Candles",
+          type: "Candle shop",
+          website: "https://acmecandles.com/",
+          description: "A small-batch soy candle maker.",
+          imageUrl: "https://example.com/acme-logo.png",
+          attributes: { Founded: "2019", Headquarters: "Austin, TX" },
+        },
+        answerBox: {
+          title: "Are soy candles better than paraffin?",
+          answer: "Soy candles burn cleaner and longer than paraffin candles.",
+          link: "https://acmecandles.com/blog/soy-vs-paraffin",
+        },
+        aiOverview: {
+          text: "Soy candles are generally considered better for indoor air quality.",
+          sources: [
+            { title: "Acme Candles — Soy vs Paraffin", link: "https://acmecandles.com/blog/soy-vs-paraffin" },
+            { title: "Candle Science", link: "https://candlescience.com/learning" },
+          ],
+        },
+      }),
+      { status: 200 }
+    )
+  );
+  const withSerpFeatures = await checkSeoRank("soy candles", "acmecandles.com", "test-key");
+  check("Parses Knowledge Graph title", withSerpFeatures.knowledgeGraph?.title === "Acme Candles");
+  check(
+    "Parses Knowledge Graph attributes",
+    withSerpFeatures.knowledgeGraph?.attributes?.Founded === "2019",
+    JSON.stringify(withSerpFeatures.knowledgeGraph?.attributes)
+  );
+  check("Parses Answer Box answer text", withSerpFeatures.answerBox?.answer?.includes("burn cleaner") ?? false);
+  check("Parses AI Overview text", withSerpFeatures.aiOverview?.text?.includes("indoor air quality") ?? false);
+  check("Parses AI Overview sources", withSerpFeatures.aiOverview?.sources.length === 2);
+  check(
+    "Detects the scanned domain is cited in the AI Overview",
+    withSerpFeatures.aiOverview?.domainCited === true
+  );
+
+  // Case 6: none of the SERP features present in the response — should fall
+  // back to null across the board rather than throwing.
+  mockFetch(async () =>
+    new Response(JSON.stringify({ organic: [{ position: 1, title: "Someone else", link: "https://someone-else.com" }] }), { status: 200 })
+  );
+  const withoutSerpFeatures = await checkSeoRank("obscure query", "acmecandles.com", "test-key");
+  check("Knowledge Graph is null when absent", withoutSerpFeatures.knowledgeGraph === null);
+  check("Answer Box is null when absent", withoutSerpFeatures.answerBox === null);
+  check("AI Overview is null when absent", withoutSerpFeatures.aiOverview === null);
+
+  // Case 7: AI Overview present but the scanned domain is NOT among its
+  // sources — domainCited should be false, not a false positive.
+  mockFetch(async () =>
+    new Response(
+      JSON.stringify({
+        organic: [{ position: 1, title: "Someone else", link: "https://someone-else.com" }],
+        aiOverview: {
+          text: "General overview text.",
+          sources: [{ title: "Other Site", link: "https://other-site.com/article" }],
+        },
+      }),
+      { status: 200 }
+    )
+  );
+  const notCited = await checkSeoRank("obscure query", "acmecandles.com", "test-key");
+  check("domainCited is false when the domain isn't among AI Overview sources", notCited.aiOverview?.domainCited === false);
+
   global.fetch = realFetch;
 
   console.log(`\n${failures === 0 ? "All Serper cases passed." : `${failures} case(s) failed.`}`);

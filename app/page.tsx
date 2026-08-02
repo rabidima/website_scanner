@@ -131,6 +131,32 @@ interface OrganicResult {
   snippet: string | null;
 }
 
+interface KnowledgeGraphResult {
+  title: string | null;
+  type: string | null;
+  website: string | null;
+  description: string | null;
+  imageUrl: string | null;
+  attributes: Record<string, string> | null;
+}
+
+interface AnswerBoxResult {
+  title: string | null;
+  answer: string | null;
+  link: string | null;
+}
+
+interface AiOverviewSource {
+  title: string | null;
+  link: string | null;
+}
+
+interface AiOverviewResult {
+  text: string | null;
+  sources: AiOverviewSource[];
+  domainCited: boolean;
+}
+
 interface SeoRankResponse {
   keyword: string;
   domain: string;
@@ -139,6 +165,9 @@ interface SeoRankResponse {
   topResults: OrganicResult[];
   relatedSearches: string[];
   peopleAlsoAsk: string[];
+  knowledgeGraph: KnowledgeGraphResult | null;
+  answerBox: AnswerBoxResult | null;
+  aiOverview: AiOverviewResult | null;
 }
 
 function ratingColor(rating: VitalRating): string {
@@ -737,6 +766,93 @@ export default function Home() {
                   )}
                 </div>
 
+                {seoResult.knowledgeGraph && (
+                  <div className="seo-kg-card">
+                    {seoResult.knowledgeGraph.imageUrl && (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={seoResult.knowledgeGraph.imageUrl} alt="" className="seo-kg-image" />
+                    )}
+                    <div className="seo-kg-body">
+                      <div className="seo-kg-title">{seoResult.knowledgeGraph.title}</div>
+                      {seoResult.knowledgeGraph.type && (
+                        <div className="seo-kg-type">{seoResult.knowledgeGraph.type}</div>
+                      )}
+                      {seoResult.knowledgeGraph.description && (
+                        <p className="seo-kg-desc">{seoResult.knowledgeGraph.description}</p>
+                      )}
+                      {seoResult.knowledgeGraph.website && (
+                        <a
+                          href={seoResult.knowledgeGraph.website}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="seo-kg-website"
+                        >
+                          {seoResult.knowledgeGraph.website}
+                        </a>
+                      )}
+                      {seoResult.knowledgeGraph.attributes && (
+                        <div className="seo-kg-attrs">
+                          {Object.entries(seoResult.knowledgeGraph.attributes).map(([k, v]) => (
+                            <span className="seo-kg-attr" key={k}>
+                              <strong>{k}:</strong> {v}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {seoResult.answerBox && (
+                  <div className="seo-answerbox">
+                    <div className="audit-group-title">Featured snippet (Answer Box)</div>
+                    {seoResult.answerBox.title && (
+                      <div className="seo-answerbox-title">{seoResult.answerBox.title}</div>
+                    )}
+                    {seoResult.answerBox.answer && (
+                      <p className="seo-answerbox-text">{seoResult.answerBox.answer}</p>
+                    )}
+                    {seoResult.answerBox.link && (
+                      <a href={seoResult.answerBox.link} target="_blank" rel="noopener noreferrer">
+                        {seoResult.answerBox.link}
+                      </a>
+                    )}
+                  </div>
+                )}
+
+                {seoResult.aiOverview && (
+                  <div className="seo-ai-overview">
+                    <div className="audit-group-title">
+                      Google AI Overview
+                      <span
+                        className={`seo-ai-cited-badge ${
+                          seoResult.aiOverview.domainCited ? "cited" : "not-cited"
+                        }`}
+                      >
+                        {seoResult.aiOverview.domainCited ? "Your domain is cited" : "Not cited"}
+                      </span>
+                    </div>
+                    {seoResult.aiOverview.text && (
+                      <p className="seo-ai-overview-text">{seoResult.aiOverview.text}</p>
+                    )}
+                    {seoResult.aiOverview.sources.length > 0 && (
+                      <div className="seo-ai-overview-sources">
+                        {seoResult.aiOverview.sources.map((s, i) => (
+                          <a
+                            key={i}
+                            href={s.link ?? "#"}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="seo-ai-source-chip"
+                          >
+                            {s.title || s.link}
+                          </a>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 {seoResult.topResults.length > 0 && (
                   <div className="seo-organic-block">
                     <div className="audit-group-title">Top organic results</div>
@@ -746,6 +862,7 @@ export default function Home() {
                           <a href={r.link} target="_blank" rel="noopener noreferrer">
                             {r.title || r.link}
                           </a>
+                          <span className="seo-organic-url">{r.link}</span>
                         </li>
                       ))}
                     </ol>
