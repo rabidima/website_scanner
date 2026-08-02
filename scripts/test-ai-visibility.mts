@@ -122,18 +122,27 @@ async function run() {
   check("Anthropic low-balance error is unwrapped from its nested envelope", (anthErr.error ?? "").includes("credit balance is too low"), anthErr.error ?? "null");
   check("Gemini stale-model error names the actual missing model", (gemErr.error ?? "").includes("gemini-1.5-flash is not found"), gemErr.error ?? "null");
 
-  // Case 7: a pathologically long response is capped, not dumped in full —
-  // guards the UI layout even though the per-provider token caps should
-  // make this practically unreachable.
+  // Case 7: responses are capped at 600 displayed characters across every
+  // provider — this is a real, commonly-hit display limit now (not just a
+  // safety net for pathological cases), since a typical 500-token answer
+  // easily runs past 600 characters.
   const hugeReply = "Acme Candles is great. " + "Filler sentence to pad out the response. ".repeat(200);
   mockFetch(async () => new Response(JSON.stringify({ choices: [{ message: { content: hugeReply } }] }), { status: 200 }));
   const withHugeReply = await runAiVisibilityCheck("acmecandles.com", ["tell me about acme candles"], { openai: "sk-test" });
   const hugeResult = withHugeReply.promptResults[0].results.find((r) => r.provider === "openai")!;
   check(
-    "fullResponse is capped at 4000 chars (plus ellipsis) instead of growing unbounded",
-    (hugeResult.fullResponse ?? "").length <= 4001 && (hugeResult.fullResponse ?? "").endsWith("…"),
+    "fullResponse is capped at 600 chars (plus ellipsis) instead of growing unbounded",
+    (hugeResult.fullResponse ?? "").length <= 601 && (hugeResult.fullResponse ?? "").endsWith("…"),
     String((hugeResult.fullResponse ?? "").length)
   );
+
+  // Case 7b: a short, typical-length reply passes through unchanged — the
+  // cap shouldn't truncate or add an ellipsis to something already under it.
+  const shortReply = "Acme Candles is a well-regarded small-batch candle maker with solid reviews.";
+  mockFetch(async () => new Response(JSON.stringify({ choices: [{ message: { content: shortReply } }] }), { status: 200 }));
+  const withShortReply = await runAiVisibilityCheck("acmecandles.com", ["is acme candles good"], { openai: "sk-test" });
+  const shortResult = withShortReply.promptResults[0].results.find((r) => r.provider === "openai")!;
+  check("A reply already under 600 chars is left untouched, no ellipsis added", shortResult.fullResponse === shortReply, shortResult.fullResponse ?? "null");
 
   // Case 8: OpenAI's Chat Completions endpoint rejects the legacy `max_tokens`
   // param for GPT-5-family models — pins the request body to the field name

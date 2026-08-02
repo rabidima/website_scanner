@@ -29,11 +29,10 @@ export interface ProviderResult {
   error: string | null;
 }
 
-// Safety cap on how much of a provider's raw response we carry through to the
-// UI — generous enough that it should never actually trigger given the
-// output-token caps each provider call sets below, but guards against a
-// single runaway response blowing up the layout.
-const MAX_FULL_RESPONSE_CHARS = 4000;
+// Display cap on how much of a provider's response is shown in the UI —
+// applies uniformly across all four providers since they all flow through
+// this same truncation point in runProvider() below.
+const MAX_FULL_RESPONSE_CHARS = 600;
 
 export interface PromptResult {
   prompt: string;
