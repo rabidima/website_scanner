@@ -30,12 +30,15 @@ async function run() {
   check("Mention rates show 0 queried when unconfigured", noKeys.mentionRates.every((r) => r.queriedCount === 0));
 
   // Case 2: OpenAI mentions the brand positively; Anthropic doesn't mention it.
+  // The OpenAI response spans multiple sentences — fullResponse must carry all
+  // of them, not just the single sentence that happens to contain the brand
+  // mention (that's what `snippet` is for; `fullResponse` is the whole thing).
+  const openaiMultiSentence =
+    "Acme Candles is one of the best and most trusted candle brands around. " +
+    "Here are some alternatives depending on what you're looking for: Yankee Candle for mainstream scents, and Boy Smells for a modern take.";
   mockFetch(async (url: string) => {
     if (url.includes("api.openai.com")) {
-      return new Response(
-        JSON.stringify({ choices: [{ message: { content: "Acme Candles is one of the best and most trusted candle brands around." } }] }),
-        { status: 200 }
-      );
+      return new Response(JSON.stringify({ choices: [{ message: { content: openaiMultiSentence } }] }), { status: 200 });
     }
     if (url.includes("api.anthropic.com")) {
       return new Response(JSON.stringify({ content: [{ text: "I don't have a specific recommendation." }] }), { status: 200 });
@@ -49,6 +52,8 @@ async function run() {
   const openaiResult = mixed.promptResults[0].results.find((r) => r.provider === "openai")!;
   const anthropicResult = mixed.promptResults[0].results.find((r) => r.provider === "anthropic")!;
   check("Detects a mention and positive sentiment from OpenAI", openaiResult.mentioned === true && openaiResult.sentiment === "positive", JSON.stringify(openaiResult));
+  check("fullResponse carries the entire reply, not just the matched sentence", openaiResult.fullResponse === openaiMultiSentence, openaiResult.fullResponse ?? "null");
+  check("snippet still holds just the one matched sentence (short preview)", (openaiResult.snippet ?? "").length < openaiMultiSentence.length, openaiResult.snippet ?? "null");
   check("Detects no mention from Anthropic", anthropicResult.mentioned === false, JSON.stringify(anthropicResult));
   check("Mention rate reflects 1/1 for openai, 0/1 for anthropic", mixed.mentionRates.find((r) => r.provider === "openai")!.mentionedCount === 1 && mixed.mentionRates.find((r) => r.provider === "anthropic")!.mentionedCount === 0);
 
@@ -116,6 +121,19 @@ async function run() {
   check("OpenAI quota error includes the real reason, not just the status", (oaiErr.error ?? "").includes("exceeded your current quota"), oaiErr.error ?? "null");
   check("Anthropic low-balance error is unwrapped from its nested envelope", (anthErr.error ?? "").includes("credit balance is too low"), anthErr.error ?? "null");
   check("Gemini stale-model error names the actual missing model", (gemErr.error ?? "").includes("gemini-1.5-flash is not found"), gemErr.error ?? "null");
+
+  // Case 7: a pathologically long response is capped, not dumped in full —
+  // guards the UI layout even though the per-provider token caps should
+  // make this practically unreachable.
+  const hugeReply = "Acme Candles is great. " + "Filler sentence to pad out the response. ".repeat(200);
+  mockFetch(async () => new Response(JSON.stringify({ choices: [{ message: { content: hugeReply } }] }), { status: 200 }));
+  const withHugeReply = await runAiVisibilityCheck("acmecandles.com", ["tell me about acme candles"], { openai: "sk-test" });
+  const hugeResult = withHugeReply.promptResults[0].results.find((r) => r.provider === "openai")!;
+  check(
+    "fullResponse is capped at 4000 chars (plus ellipsis) instead of growing unbounded",
+    (hugeResult.fullResponse ?? "").length <= 4001 && (hugeResult.fullResponse ?? "").endsWith("…"),
+    String((hugeResult.fullResponse ?? "").length)
+  );
 
   global.fetch = realFetch;
 

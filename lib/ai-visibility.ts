@@ -23,10 +23,17 @@ export interface ProviderResult {
   configured: boolean;
   mentioned: boolean;
   snippet: string | null;
+  fullResponse: string | null;
   citedUrl: string | null;
   sentiment: Sentiment | null;
   error: string | null;
 }
+
+// Safety cap on how much of a provider's raw response we carry through to the
+// UI — generous enough that it should never actually trigger given the
+// output-token caps each provider call sets below, but guards against a
+// single runaway response blowing up the layout.
+const MAX_FULL_RESPONSE_CHARS = 4000;
 
 export interface PromptResult {
   prompt: string;
@@ -229,7 +236,7 @@ async function queryGemini(prompt: string, apiKey: string): Promise<RawQueryResu
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }),
+      body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], generationConfig: { maxOutputTokens: 500 } }),
     }
   );
   if (!res.ok) throw new Error(await describeApiError(res, "Gemini"));
@@ -243,7 +250,7 @@ async function queryPerplexity(prompt: string, apiKey: string): Promise<RawQuery
   const res = await fetchWithTimeout("https://api.perplexity.ai/chat/completions", {
     method: "POST",
     headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-    body: JSON.stringify({ model, messages: [{ role: "user", content: prompt }] }),
+    body: JSON.stringify({ model, messages: [{ role: "user", content: prompt }], max_tokens: 500 }),
   });
   if (!res.ok) throw new Error(await describeApiError(res, "Perplexity"));
   const data = await res.json();
@@ -268,24 +275,26 @@ async function runProvider(
   brand: string
 ): Promise<ProviderResult> {
   if (!apiKey) {
-    return { provider, configured: false, mentioned: false, snippet: null, citedUrl: null, sentiment: null, error: null };
+    return { provider, configured: false, mentioned: false, snippet: null, fullResponse: null, citedUrl: null, sentiment: null, error: null };
   }
   try {
     const { text, citations } = await PROVIDER_QUERIES[provider](prompt, apiKey);
     const { mentioned, snippet, matchIndex } = findMention(text, domain, brand);
     if (!mentioned) {
-      return { provider, configured: true, mentioned: false, snippet: null, citedUrl: null, sentiment: null, error: null };
+      return { provider, configured: true, mentioned: false, snippet: null, fullResponse: null, citedUrl: null, sentiment: null, error: null };
     }
     const sentiment = scoreSentiment(text, matchIndex === -1 ? 0 : matchIndex);
     const allUrls = citations.length > 0 ? citations : extractUrls(text);
     const citedUrl = findCitedUrl(allUrls, domain);
-    return { provider, configured: true, mentioned: true, snippet, citedUrl, sentiment, error: null };
+    const fullResponse = text.length > MAX_FULL_RESPONSE_CHARS ? text.slice(0, MAX_FULL_RESPONSE_CHARS) + "…" : text;
+    return { provider, configured: true, mentioned: true, snippet, fullResponse, citedUrl, sentiment, error: null };
   } catch (err) {
     return {
       provider,
       configured: true,
       mentioned: false,
       snippet: null,
+      fullResponse: null,
       citedUrl: null,
       sentiment: null,
       error: err instanceof Error ? err.message : "Request failed.",

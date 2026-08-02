@@ -101,6 +101,7 @@ interface AiProviderResult {
   configured: boolean;
   mentioned: boolean;
   snippet: string | null;
+  fullResponse: string | null;
   citedUrl: string | null;
   sentiment: "positive" | "neutral" | "negative" | null;
   error: string | null;
@@ -716,13 +717,13 @@ export default function Home() {
                           ))}
                       </div>
                     )}
-                    {pr.results.some((r) => r.mentioned && r.snippet) && (
+                    {pr.results.some((r) => r.mentioned && r.fullResponse) && (
                       <div className="ai-mention-details">
                         {pr.results
-                          .filter((r) => r.mentioned && r.snippet)
+                          .filter((r) => r.mentioned && r.fullResponse)
                           .map((r) => (
                             <div className="ai-mention-detail-line" key={r.provider}>
-                              <strong>{PROVIDER_LABELS[r.provider]}:</strong> {r.snippet}
+                              <strong>{PROVIDER_LABELS[r.provider]}:</strong> {r.fullResponse}
                             </div>
                           ))}
                       </div>

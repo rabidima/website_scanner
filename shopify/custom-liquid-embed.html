@@ -609,7 +609,7 @@
             });
             block.appendChild(errDetails);
           }
-          var mentioned = (pr.results || []).filter(function (r) { return r.mentioned && r.snippet; });
+          var mentioned = (pr.results || []).filter(function (r) { return r.mentioned && r.fullResponse; });
           if (mentioned.length > 0) {
             var mentionDetails = document.createElement("div");
             mentionDetails.className = "ss-ai-mention-details";
@@ -619,7 +619,7 @@
               var strong = document.createElement("strong");
               strong.textContent = (PROVIDER_LABELS[r.provider] || r.provider) + ": ";
               line.appendChild(strong);
-              line.appendChild(document.createTextNode(r.snippet));
+              line.appendChild(document.createTextNode(r.fullResponse));
               mentionDetails.appendChild(line);
             });
             block.appendChild(mentionDetails);
