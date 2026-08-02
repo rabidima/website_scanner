@@ -204,7 +204,10 @@ async function queryOpenAi(prompt: string, apiKey: string): Promise<RawQueryResu
   const res = await fetchWithTimeout("https://api.openai.com/v1/chat/completions", {
     method: "POST",
     headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-    body: JSON.stringify({ model, messages: [{ role: "user", content: prompt }], max_tokens: 500 }),
+    // GPT-5-family models reject the legacy `max_tokens` param and require
+    // `max_completion_tokens` instead — this only applies to OpenAI's Chat
+    // Completions endpoint, the other three providers are unaffected.
+    body: JSON.stringify({ model, messages: [{ role: "user", content: prompt }], max_completion_tokens: 500 }),
   });
   if (!res.ok) throw new Error(await describeApiError(res, "OpenAI"));
   const data = await res.json();

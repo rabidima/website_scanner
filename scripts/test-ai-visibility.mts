@@ -135,6 +135,20 @@ async function run() {
     String((hugeResult.fullResponse ?? "").length)
   );
 
+  // Case 8: OpenAI's Chat Completions endpoint rejects the legacy `max_tokens`
+  // param for GPT-5-family models — pins the request body to the field name
+  // that actually works so this can't silently regress back to max_tokens.
+  let capturedOpenAiBody: any = null;
+  mockFetch(async (url: string, init: any) => {
+    if (url.includes("api.openai.com")) {
+      capturedOpenAiBody = JSON.parse(init.body);
+      return new Response(JSON.stringify({ choices: [{ message: { content: "no mention here" } }] }), { status: 200 });
+    }
+    throw new Error("unexpected provider call: " + url);
+  });
+  await runAiVisibilityCheck("acmecandles.com", ["any prompt"], { openai: "sk-test" });
+  check("OpenAI request uses max_completion_tokens, not the rejected max_tokens", capturedOpenAiBody?.max_completion_tokens === 500 && capturedOpenAiBody?.max_tokens === undefined, JSON.stringify(capturedOpenAiBody));
+
   global.fetch = realFetch;
 
   console.log(`\n${failures === 0 ? "All AI visibility cases passed." : `${failures} case(s) failed.`}`);
