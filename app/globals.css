@@ -690,6 +690,24 @@ body {
   font-weight: 600;
 }
 
+.ai-mention-details {
+  margin-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.ai-mention-detail-line {
+  font-size: 0.78rem;
+  color: var(--text-dim);
+  line-height: 1.4;
+}
+
+.ai-mention-detail-line strong {
+  font-weight: 600;
+  color: var(--text);
+}
+
 .seo-results {
   margin-top: 20px;
   display: flex;

@@ -193,6 +193,9 @@
     .stackscan-widget .ss-ai-error-details { margin-top: 8px; display: flex; flex-direction: column; gap: 4px; }
     .stackscan-widget .ss-ai-error-detail-line { font-size: 11px; color: #a12a2a; line-height: 1.4; }
     .stackscan-widget .ss-ai-error-detail-line strong { font-weight: 700; }
+    .stackscan-widget .ss-ai-mention-details { margin-top: 8px; display: flex; flex-direction: column; gap: 4px; }
+    .stackscan-widget .ss-ai-mention-detail-line { font-size: 11px; color: var(--ss-text-muted); line-height: 1.4; }
+    .stackscan-widget .ss-ai-mention-detail-line strong { font-weight: 700; color: var(--ss-text); }
     .stackscan-widget .ss-seo-results { margin-top: 16px; display: flex; flex-direction: column; gap: 14px; }
     .stackscan-widget .ss-seo-rank-badge { font-size: 14px; }
     .stackscan-widget .ss-seo-organic-list { margin: 8px 0 0; padding-left: 18px; font-size: 13px; display: flex; flex-direction: column; gap: 10px; }
@@ -605,6 +608,21 @@
               errDetails.appendChild(line);
             });
             block.appendChild(errDetails);
+          }
+          var mentioned = (pr.results || []).filter(function (r) { return r.mentioned && r.snippet; });
+          if (mentioned.length > 0) {
+            var mentionDetails = document.createElement("div");
+            mentionDetails.className = "ss-ai-mention-details";
+            mentioned.forEach(function (r) {
+              var line = document.createElement("div");
+              line.className = "ss-ai-mention-detail-line";
+              var strong = document.createElement("strong");
+              strong.textContent = (PROVIDER_LABELS[r.provider] || r.provider) + ": ";
+              line.appendChild(strong);
+              line.appendChild(document.createTextNode(r.snippet));
+              mentionDetails.appendChild(line);
+            });
+            block.appendChild(mentionDetails);
           }
           aiResultsBox.appendChild(block);
         });

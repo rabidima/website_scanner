@@ -716,6 +716,17 @@ export default function Home() {
                           ))}
                       </div>
                     )}
+                    {pr.results.some((r) => r.mentioned && r.snippet) && (
+                      <div className="ai-mention-details">
+                        {pr.results
+                          .filter((r) => r.mentioned && r.snippet)
+                          .map((r) => (
+                            <div className="ai-mention-detail-line" key={r.provider}>
+                              <strong>{PROVIDER_LABELS[r.provider]}:</strong> {r.snippet}
+                            </div>
+                          ))}
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
