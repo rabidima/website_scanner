@@ -149,6 +149,25 @@ async function run() {
   await runAiVisibilityCheck("acmecandles.com", ["any prompt"], { openai: "sk-test" });
   check("OpenAI request uses max_completion_tokens, not the rejected max_tokens", capturedOpenAiBody?.max_completion_tokens === 500 && capturedOpenAiBody?.max_tokens === undefined, JSON.stringify(capturedOpenAiBody));
 
+  // Case 9: Gemini's Flash models think by default and thinking tokens eat
+  // into the same maxOutputTokens budget as the visible answer, so thinking
+  // must be explicitly disabled or a low token cap silently truncates real
+  // responses down to a fragment. Pins thinkingBudget: 0 in the request body.
+  let capturedGeminiBody: any = null;
+  mockFetch(async (url: string, init: any) => {
+    if (url.includes("generativelanguage.googleapis.com")) {
+      capturedGeminiBody = JSON.parse(init.body);
+      return new Response(JSON.stringify({ candidates: [{ content: { parts: [{ text: "no mention here" } ] } }] }), { status: 200 });
+    }
+    throw new Error("unexpected provider call: " + url);
+  });
+  await runAiVisibilityCheck("acmecandles.com", ["any prompt"], { gemini: "test-key" });
+  check(
+    "Gemini request disables thinking so the token budget goes to the visible answer",
+    capturedGeminiBody?.generationConfig?.thinkingConfig?.thinkingBudget === 0,
+    JSON.stringify(capturedGeminiBody)
+  );
+
   global.fetch = realFetch;
 
   console.log(`\n${failures === 0 ? "All AI visibility cases passed." : `${failures} case(s) failed.`}`);

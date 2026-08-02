@@ -239,7 +239,16 @@ async function queryGemini(prompt: string, apiKey: string): Promise<RawQueryResu
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], generationConfig: { maxOutputTokens: 500 } }),
+      // Gemini's Flash models think by default, and thinking tokens are
+      // deducted from the same maxOutputTokens budget rather than a separate
+      // pool — with thinking left on, a 500-token cap gets mostly consumed by
+      // internal reasoning, leaving only a truncated fragment of the actual
+      // answer. thinkingBudget: 0 turns thinking off entirely for this
+      // simple "does the brand get mentioned" query, where we don't need it.
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: prompt }] }],
+        generationConfig: { maxOutputTokens: 500, thinkingConfig: { thinkingBudget: 0 } },
+      }),
     }
   );
   if (!res.ok) throw new Error(await describeApiError(res, "Gemini"));
