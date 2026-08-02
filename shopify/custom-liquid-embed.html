@@ -94,6 +94,10 @@
       border-radius: var(--ss-radius); padding: 6px 12px; font-size: 12px; font-weight: 600; cursor: pointer;
     }
     .stackscan-widget .ss-retry-btn:hover { background: #fdecec; }
+    .stackscan-widget .ss-bot-block {
+      background: #fef6e5; border: 1px solid #f2d999; color: #8a6415;
+      border-radius: var(--ss-radius); padding: 10px 14px; font-size: 13px; line-height: 1.5; margin-bottom: 14px;
+    }
     .stackscan-widget .ss-page-info {
       background: var(--ss-bg); border: 1px solid var(--ss-border); border-radius: var(--ss-radius);
       padding: 12px 16px; margin-bottom: 14px; display: flex; flex-direction: column; gap: 8px;
@@ -163,6 +167,37 @@
     .stackscan-widget .ss-audit-list { list-style: none; margin: 0; padding: 0; }
     .stackscan-widget .ss-audit-list li { font-size: 12px; padding: 2px 0; }
     .stackscan-widget .ss-audit-list li::before { content: "\00b7 "; color: #a12a2a; }
+    .stackscan-widget textarea {
+      width: 100%; margin-top: 10px; border: 1px solid var(--ss-border); border-radius: var(--ss-radius);
+      padding: 10px 12px; font-size: 13px; font-family: inherit; resize: vertical; box-sizing: border-box;
+    }
+    .stackscan-widget .ss-ai-results { margin-top: 16px; display: flex; flex-direction: column; gap: 12px; }
+    .stackscan-widget .ss-ai-rates { display: flex; flex-wrap: wrap; gap: 8px; }
+    .stackscan-widget .ss-ai-rate-pill {
+      display: flex; align-items: baseline; gap: 6px; background: #fff; border: 1px solid var(--ss-border);
+      border-radius: 999px; padding: 5px 12px; font-size: 12px;
+    }
+    .stackscan-widget .ss-ai-rate-label { color: var(--ss-text-muted); font-weight: 600; }
+    .stackscan-widget .ss-ai-prompt { background: var(--ss-bg); border: 1px solid var(--ss-border); border-radius: var(--ss-radius); padding: 12px 14px; }
+    .stackscan-widget .ss-ai-prompt-text { font-size: 13px; margin-bottom: 8px; }
+    .stackscan-widget .ss-ai-chip-row { display: flex; flex-wrap: wrap; gap: 6px; }
+    .stackscan-widget .ss-ai-chip {
+      display: flex; align-items: center; gap: 4px; border-radius: 999px; padding: 5px 10px; font-size: 11px;
+      font-weight: 600; border: 1px solid var(--ss-border); background: #fff; color: var(--ss-text-muted);
+    }
+    .stackscan-widget .ss-ai-chip.mentioned.positive { border-color: #2fa86b; color: #1f7a4f; }
+    .stackscan-widget .ss-ai-chip.mentioned.neutral { border-color: #1a1a1a; color: #1a1a1a; }
+    .stackscan-widget .ss-ai-chip.mentioned.negative { border-color: #d1443f; color: #a12a2a; }
+    .stackscan-widget .ss-ai-chip.errored { border-color: #d1443f; color: #a12a2a; }
+    .stackscan-widget .ss-ai-chip a { color: inherit; margin-left: 2px; }
+    .stackscan-widget .ss-seo-results { margin-top: 16px; display: flex; flex-direction: column; gap: 14px; }
+    .stackscan-widget .ss-seo-rank-badge { font-size: 14px; }
+    .stackscan-widget .ss-seo-organic-list { margin: 8px 0 0; padding-left: 18px; font-size: 13px; display: flex; flex-direction: column; gap: 5px; }
+    .stackscan-widget .ss-seo-organic-list a { color: var(--ss-accent); }
+    .stackscan-widget .ss-seo-organic-list li.ss-matched { font-weight: 700; }
+    .stackscan-widget .ss-seo-organic-list li.ss-matched a { color: #1f7a4f; }
+    .stackscan-widget .ss-seo-chip-row { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+    .stackscan-widget .ss-seo-idea-chip { background: var(--ss-bg); border: 1px solid var(--ss-border); border-radius: 999px; padding: 5px 10px; font-size: 11px; color: var(--ss-text-muted); }
   </style>
 
   <div class="ss-form">
@@ -171,6 +206,7 @@
   </div>
   <div class="ss-status" id="ss-status"></div>
   <div id="ss-error" style="display:none;" class="ss-error"></div>
+  <div id="ss-bot-block" style="display:none;" class="ss-bot-block"></div>
   <div class="ss-page-info" id="ss-page-info" style="display:none;"></div>
   <div id="ss-llms" style="display:none;"></div>
   <div class="ss-results" id="ss-results"></div>
@@ -184,6 +220,32 @@
     <div class="ss-status" id="ss-psi-status"></div>
     <div id="ss-psi-error" style="display:none;" class="ss-error"></div>
     <div class="ss-psi-results" id="ss-psi-results"></div>
+  </div>
+
+  <div class="ss-psi" id="ss-ai" style="display:none;">
+    <div class="ss-psi-header">
+      <h3>AI visibility check</h3>
+      <button id="ss-ai-go" type="button">Check AI visibility</button>
+    </div>
+    <p class="ss-psi-sub">Queries ChatGPT, Claude, Gemini, and Perplexity directly and checks whether your domain gets mentioned. Live snapshot only. Up to 5 prompts, one per line.</p>
+    <textarea id="ss-ai-prompts" rows="4" placeholder="best alternatives to ...&#10;who are the top companies for ...&#10;is ... worth it?"></textarea>
+    <div class="ss-status" id="ss-ai-status"></div>
+    <div id="ss-ai-error" style="display:none;" class="ss-error"></div>
+    <div class="ss-ai-results" id="ss-ai-results"></div>
+  </div>
+
+  <div class="ss-psi" id="ss-seo" style="display:none;">
+    <div class="ss-psi-header">
+      <h3>SEO rank check</h3>
+    </div>
+    <p class="ss-psi-sub">Checks where your domain currently ranks in Google for a keyword, plus top competitors and related keyword ideas. Live snapshot, not tracked over time.</p>
+    <div class="ss-form" style="margin-top:10px;">
+      <input type="text" id="ss-seo-keyword" placeholder="e.g. handmade candles" />
+      <button id="ss-seo-go" type="button">Check rank</button>
+    </div>
+    <div class="ss-status" id="ss-seo-status"></div>
+    <div id="ss-seo-error" style="display:none;" class="ss-error"></div>
+    <div class="ss-seo-results" id="ss-seo-results"></div>
   </div>
 
   <script>
@@ -205,6 +267,7 @@
       var button = document.getElementById("ss-go");
       var status = document.getElementById("ss-status");
       var errorBox = document.getElementById("ss-error");
+      var botBlockBox = document.getElementById("ss-bot-block");
       var pageInfo = document.getElementById("ss-page-info");
       var llmsBox = document.getElementById("ss-llms");
       var results = document.getElementById("ss-results");
@@ -213,7 +276,21 @@
       var psiStatus = document.getElementById("ss-psi-status");
       var psiErrorBox = document.getElementById("ss-psi-error");
       var psiResults = document.getElementById("ss-psi-results");
+      var aiSection = document.getElementById("ss-ai");
+      var aiGoButton = document.getElementById("ss-ai-go");
+      var aiPromptsInput = document.getElementById("ss-ai-prompts");
+      var aiStatus = document.getElementById("ss-ai-status");
+      var aiErrorBox = document.getElementById("ss-ai-error");
+      var aiResultsBox = document.getElementById("ss-ai-results");
+      var seoSection = document.getElementById("ss-seo");
+      var seoGoButton = document.getElementById("ss-seo-go");
+      var seoKeywordInput = document.getElementById("ss-seo-keyword");
+      var seoStatus = document.getElementById("ss-seo-status");
+      var seoErrorBox = document.getElementById("ss-seo-error");
+      var seoResultsBox = document.getElementById("ss-seo-results");
       var lastScannedUrl = null;
+
+      var PROVIDER_LABELS = { openai: "ChatGPT", anthropic: "Claude", gemini: "Gemini", perplexity: "Perplexity" };
 
       function gaugeColor(score) {
         if (score === null) return "#5f5e5a";
@@ -424,6 +501,202 @@
           });
       }
 
+      function providerChip(result) {
+        var chip = document.createElement("div");
+        var label = PROVIDER_LABELS[result.provider] || result.provider;
+        if (!result.configured) {
+          chip.className = "ss-ai-chip";
+          chip.textContent = label + " · not configured";
+          return chip;
+        }
+        if (result.error) {
+          chip.className = "ss-ai-chip errored";
+          chip.title = result.error;
+          chip.textContent = label + " · error";
+          return chip;
+        }
+        if (!result.mentioned) {
+          chip.className = "ss-ai-chip";
+          chip.textContent = label + " · not mentioned";
+          return chip;
+        }
+        var sentimentClass = result.sentiment || "neutral";
+        chip.className = "ss-ai-chip mentioned " + sentimentClass;
+        chip.title = result.snippet || "";
+        chip.textContent = label + " · mentioned" + (result.sentiment ? " · " + result.sentiment : "");
+        if (result.citedUrl) {
+          var link = document.createElement("a");
+          link.href = result.citedUrl;
+          link.target = "_blank";
+          link.rel = "noopener noreferrer";
+          link.textContent = "(cited)";
+          link.addEventListener("click", function (e) { e.stopPropagation(); });
+          chip.appendChild(link);
+        }
+        return chip;
+      }
+
+      function renderAiVisibility(data) {
+        aiResultsBox.innerHTML = "";
+        var rates = document.createElement("div");
+        rates.className = "ss-ai-rates";
+        (data.mentionRates || []).forEach(function (r) {
+          var pill = document.createElement("div");
+          pill.className = "ss-ai-rate-pill";
+          var label = document.createElement("span");
+          label.className = "ss-ai-rate-label";
+          label.textContent = PROVIDER_LABELS[r.provider] || r.provider;
+          var value = document.createElement("span");
+          value.textContent = r.queriedCount === 0 ? "not configured" : r.mentionedCount + "/" + r.queriedCount + " mentioned";
+          pill.appendChild(label);
+          pill.appendChild(value);
+          rates.appendChild(pill);
+        });
+        aiResultsBox.appendChild(rates);
+
+        (data.promptResults || []).forEach(function (pr) {
+          var block = document.createElement("div");
+          block.className = "ss-ai-prompt";
+          var text = document.createElement("div");
+          text.className = "ss-ai-prompt-text";
+          text.textContent = pr.prompt;
+          block.appendChild(text);
+          var row = document.createElement("div");
+          row.className = "ss-ai-chip-row";
+          (pr.results || []).forEach(function (r) { row.appendChild(providerChip(r)); });
+          block.appendChild(row);
+          aiResultsBox.appendChild(block);
+        });
+      }
+
+      function runAiVisibility() {
+        if (!lastScannedUrl) return;
+        var prompts = aiPromptsInput.value.split("\n").map(function (p) { return p.trim(); }).filter(Boolean).slice(0, 5);
+        if (prompts.length === 0) {
+          showError(aiErrorBox, "Enter at least one prompt, one per line.", runAiVisibility);
+          return;
+        }
+        aiErrorBox.style.display = "none";
+        aiResultsBox.innerHTML = "";
+        aiStatus.innerHTML = "";
+        var spin = document.createElement("span");
+        spin.className = "ss-spinner";
+        aiStatus.appendChild(spin);
+        aiStatus.appendChild(document.createTextNode("Querying AI providers…"));
+        aiGoButton.disabled = true;
+
+        fetch(API_BASE + "/api/ai-visibility", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ domain: lastScannedUrl, prompts: prompts })
+        })
+          .then(function (res) { return res.json().then(function (data) { return { ok: res.ok, data: data }; }); })
+          .then(function (r) {
+            aiGoButton.disabled = false;
+            aiGoButton.textContent = "Re-run";
+            if (!r.ok) {
+              aiStatus.textContent = "";
+              showError(aiErrorBox, r.data.error || "AI visibility check failed.", runAiVisibility);
+              return;
+            }
+            aiStatus.textContent = "";
+            renderAiVisibility(r.data);
+          })
+          .catch(function () {
+            aiGoButton.disabled = false;
+            aiGoButton.textContent = "Re-run";
+            aiStatus.textContent = "";
+            showError(aiErrorBox, "Network error — check ALLOWED_ORIGINS includes this store's domain.", runAiVisibility);
+          });
+      }
+
+      function renderSeoRank(data) {
+        seoResultsBox.innerHTML = "";
+        var badge = document.createElement("div");
+        badge.className = "ss-seo-rank-badge";
+        if (data.rank) {
+          badge.innerHTML = "Ranked <strong>#" + data.rank + "</strong> for \"" + data.keyword + "\"";
+        } else {
+          badge.textContent = "Not found in the top 100 results for \"" + data.keyword + "\"";
+        }
+        seoResultsBox.appendChild(badge);
+
+        if (data.topResults && data.topResults.length > 0) {
+          var orgTitle = document.createElement("div");
+          orgTitle.className = "ss-audit-group-title";
+          orgTitle.textContent = "Top organic results";
+          seoResultsBox.appendChild(orgTitle);
+          var list = document.createElement("ol");
+          list.className = "ss-seo-organic-list";
+          data.topResults.forEach(function (r) {
+            var li = document.createElement("li");
+            if (r.link === data.matchedUrl) li.className = "ss-matched";
+            var a = document.createElement("a");
+            a.href = r.link;
+            a.target = "_blank";
+            a.rel = "noopener noreferrer";
+            a.textContent = r.title || r.link;
+            li.appendChild(a);
+            list.appendChild(li);
+          });
+          seoResultsBox.appendChild(list);
+        }
+
+        var ideas = (data.relatedSearches || []).concat(data.peopleAlsoAsk || []).slice(0, 12);
+        if (ideas.length > 0) {
+          var ideaTitle = document.createElement("div");
+          ideaTitle.className = "ss-audit-group-title";
+          ideaTitle.style.marginTop = "6px";
+          ideaTitle.textContent = "Keyword ideas";
+          seoResultsBox.appendChild(ideaTitle);
+          var chipRow = document.createElement("div");
+          chipRow.className = "ss-seo-chip-row";
+          ideas.forEach(function (q) {
+            var chip = document.createElement("span");
+            chip.className = "ss-seo-idea-chip";
+            chip.textContent = q;
+            chipRow.appendChild(chip);
+          });
+          seoResultsBox.appendChild(chipRow);
+        }
+      }
+
+      function runSeoRank() {
+        if (!lastScannedUrl) return;
+        var keyword = seoKeywordInput.value.trim();
+        if (!keyword) return;
+        seoErrorBox.style.display = "none";
+        seoResultsBox.innerHTML = "";
+        seoStatus.innerHTML = "";
+        var spin = document.createElement("span");
+        spin.className = "ss-spinner";
+        seoStatus.appendChild(spin);
+        seoStatus.appendChild(document.createTextNode("Checking Google search results…"));
+        seoGoButton.disabled = true;
+
+        fetch(API_BASE + "/api/seo-rank", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ domain: lastScannedUrl, keyword: keyword })
+        })
+          .then(function (res) { return res.json().then(function (data) { return { ok: res.ok, data: data }; }); })
+          .then(function (r) {
+            seoGoButton.disabled = false;
+            if (!r.ok) {
+              seoStatus.textContent = "";
+              showError(seoErrorBox, r.data.error || "Rank check failed.", runSeoRank);
+              return;
+            }
+            seoStatus.textContent = "";
+            renderSeoRank(r.data);
+          })
+          .catch(function () {
+            seoGoButton.disabled = false;
+            seoStatus.textContent = "";
+            showError(seoErrorBox, "Network error — check ALLOWED_ORIGINS includes this store's domain.", runSeoRank);
+          });
+      }
+
       function renderPageInfo(page) {
         function row(label, value) {
           var r = document.createElement("div");
@@ -449,6 +722,17 @@
         pageInfo.appendChild(row("Description", page.description));
         pageInfo.appendChild(row("H1", page.h1));
         pageInfo.style.display = "flex";
+      }
+
+      function renderBotBlock(botBlock, finalUrl) {
+        if (!botBlock || !botBlock.blocked) {
+          botBlockBox.style.display = "none";
+          botBlockBox.textContent = "";
+          return;
+        }
+        var who = botBlock.vendor ? botBlock.vendor + "'s" : "this site's";
+        botBlockBox.textContent = "This scan was likely blocked by " + who + " bot protection, which returned a block page instead of the real site. The title, description, H1, and any content below may reflect that block page rather than " + finalUrl + "'s actual content.";
+        botBlockBox.style.display = "block";
       }
 
       function renderLlmsTxt(llmsTxt) {
@@ -545,12 +829,19 @@
         var url = input.value.trim();
         if (!url) return;
         errorBox.style.display = "none";
+        botBlockBox.style.display = "none";
         pageInfo.style.display = "none";
         llmsBox.style.display = "none";
         llmsBox.innerHTML = "";
         results.innerHTML = "";
         psiSection.style.display = "none";
         psiResults.innerHTML = "";
+        aiSection.style.display = "none";
+        aiResultsBox.innerHTML = "";
+        aiErrorBox.style.display = "none";
+        seoSection.style.display = "none";
+        seoResultsBox.innerHTML = "";
+        seoErrorBox.style.display = "none";
         status.textContent = "Fetching the page and checking signatures…";
         button.disabled = true;
 
@@ -571,12 +862,16 @@
             }
             status.textContent = "Scanned " + r.data.finalUrl + " · HTTP " + r.data.statusCode +
               " · " + r.data.technologies.length + " technologies detected";
+            renderBotBlock(r.data.botBlock, r.data.finalUrl);
             if (r.data.page) renderPageInfo(r.data.page);
             renderLlmsTxt(r.data.llmsTxt);
             render(r.data.technologies);
             lastScannedUrl = r.data.finalUrl;
             psiGoButton.textContent = "Run diagnostics";
             psiSection.style.display = "block";
+            aiGoButton.textContent = "Check AI visibility";
+            aiSection.style.display = "block";
+            seoSection.style.display = "block";
           })
           .catch(function () {
             button.disabled = false;
@@ -590,6 +885,11 @@
         if (e.key === "Enter") scan();
       });
       psiGoButton.addEventListener("click", runPageSpeed);
+      aiGoButton.addEventListener("click", runAiVisibility);
+      seoGoButton.addEventListener("click", runSeoRank);
+      seoKeywordInput.addEventListener("keydown", function (e) {
+        if (e.key === "Enter") runSeoRank();
+      });
     })();
   </script>
 </div>

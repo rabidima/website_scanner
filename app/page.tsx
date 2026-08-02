@@ -16,6 +16,11 @@ interface LlmsTxt {
   truncated: boolean;
 }
 
+interface BotBlock {
+  blocked: boolean;
+  vendor: string | null;
+}
+
 interface ScanResponse {
   requestedUrl: string;
   finalUrl: string;
@@ -24,6 +29,7 @@ interface ScanResponse {
   technologies: Technology[];
   page: PageInfo;
   llmsTxt: LlmsTxt;
+  botBlock: BotBlock;
   meta: { server: string | null; poweredBy: string | null };
 }
 
@@ -79,6 +85,60 @@ interface PageSpeedResponse {
   url: string;
   mobile: PsiResult;
   desktop: PsiResult;
+}
+
+type AiProvider = "openai" | "anthropic" | "gemini" | "perplexity";
+
+const PROVIDER_LABELS: Record<AiProvider, string> = {
+  openai: "ChatGPT",
+  anthropic: "Claude",
+  gemini: "Gemini",
+  perplexity: "Perplexity",
+};
+
+interface AiProviderResult {
+  provider: AiProvider;
+  configured: boolean;
+  mentioned: boolean;
+  snippet: string | null;
+  citedUrl: string | null;
+  sentiment: "positive" | "neutral" | "negative" | null;
+  error: string | null;
+}
+
+interface AiPromptResult {
+  prompt: string;
+  results: AiProviderResult[];
+}
+
+interface AiMentionRate {
+  provider: AiProvider;
+  mentionedCount: number;
+  queriedCount: number;
+}
+
+interface AiVisibilityResponse {
+  domain: string;
+  brand: string;
+  promptResults: AiPromptResult[];
+  mentionRates: AiMentionRate[];
+}
+
+interface OrganicResult {
+  position: number;
+  title: string;
+  link: string;
+  snippet: string | null;
+}
+
+interface SeoRankResponse {
+  keyword: string;
+  domain: string;
+  rank: number | null;
+  matchedUrl: string | null;
+  topResults: OrganicResult[];
+  relatedSearches: string[];
+  peopleAlsoAsk: string[];
 }
 
 function ratingColor(rating: VitalRating): string {
@@ -147,6 +207,45 @@ function AuditList({ title, items }: { title: string; items: AuditIssue[] }) {
           <li key={a.id} title={a.description}>{a.title}</li>
         ))}
       </ul>
+    </div>
+  );
+}
+
+function ProviderChip({ result }: { result: AiProviderResult }) {
+  if (!result.configured) {
+    return (
+      <div className="ai-provider-chip not-configured">
+        {PROVIDER_LABELS[result.provider]}
+        <span className="ai-chip-status">not configured</span>
+      </div>
+    );
+  }
+  if (result.error) {
+    return (
+      <div className="ai-provider-chip errored" title={result.error}>
+        {PROVIDER_LABELS[result.provider]}
+        <span className="ai-chip-status">error</span>
+      </div>
+    );
+  }
+  if (!result.mentioned) {
+    return (
+      <div className="ai-provider-chip not-mentioned">
+        {PROVIDER_LABELS[result.provider]}
+        <span className="ai-chip-status">not mentioned</span>
+      </div>
+    );
+  }
+  const sentimentClass = result.sentiment ?? "neutral";
+  return (
+    <div className={`ai-provider-chip mentioned ${sentimentClass}`} title={result.snippet ?? ""}>
+      {PROVIDER_LABELS[result.provider]}
+      <span className="ai-chip-status">mentioned{result.sentiment ? ` · ${result.sentiment}` : ""}</span>
+      {result.citedUrl && (
+        <a href={result.citedUrl} target="_blank" rel="noopener noreferrer" className="ai-chip-cite" onClick={(e) => e.stopPropagation()}>
+          cited
+        </a>
+      )}
     </div>
   );
 }
@@ -266,6 +365,16 @@ export default function Home() {
   const [psiError, setPsiError] = useState<string | null>(null);
   const [psiResult, setPsiResult] = useState<PageSpeedResponse | null>(null);
 
+  const [aiPrompts, setAiPrompts] = useState("");
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiError, setAiError] = useState<string | null>(null);
+  const [aiResult, setAiResult] = useState<AiVisibilityResponse | null>(null);
+
+  const [seoKeyword, setSeoKeyword] = useState("");
+  const [seoLoading, setSeoLoading] = useState(false);
+  const [seoError, setSeoError] = useState<string | null>(null);
+  const [seoResult, setSeoResult] = useState<SeoRankResponse | null>(null);
+
   async function runScan(targetUrl: string) {
     if (!targetUrl.trim() || loading) return;
 
@@ -274,6 +383,10 @@ export default function Home() {
     setResult(null);
     setPsiResult(null);
     setPsiError(null);
+    setAiResult(null);
+    setAiError(null);
+    setSeoResult(null);
+    setSeoError(null);
 
     try {
       const res = await fetch("/api/scan", {
@@ -323,6 +436,63 @@ export default function Home() {
     }
   }
 
+  async function handleAiVisibility() {
+    if (!result || aiLoading) return;
+    const prompts = aiPrompts
+      .split("\n")
+      .map((p) => p.trim())
+      .filter(Boolean)
+      .slice(0, 5);
+    if (prompts.length === 0) {
+      setAiError("Enter at least one prompt, one per line.");
+      return;
+    }
+    setAiLoading(true);
+    setAiError(null);
+
+    try {
+      const res = await fetch("/api/ai-visibility", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ domain: result.finalUrl, prompts }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setAiError(data.error ?? "AI visibility check failed.");
+      } else {
+        setAiResult(data);
+      }
+    } catch {
+      setAiError("Network error. Try again.");
+    } finally {
+      setAiLoading(false);
+    }
+  }
+
+  async function handleSeoRank() {
+    if (!result || seoLoading || !seoKeyword.trim()) return;
+    setSeoLoading(true);
+    setSeoError(null);
+
+    try {
+      const res = await fetch("/api/seo-rank", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ domain: result.finalUrl, keyword: seoKeyword.trim() }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setSeoError(data.error ?? "Rank check failed.");
+      } else {
+        setSeoResult(data);
+      }
+    } catch {
+      setSeoError("Network error. Try again.");
+    } finally {
+      setSeoLoading(false);
+    }
+  }
+
   const grouped = result
     ? CATEGORY_ORDER.map((cat) => ({
         category: cat,
@@ -368,6 +538,14 @@ export default function Home() {
             Scanned <code>{result.finalUrl}</code> · HTTP {result.statusCode} ·{" "}
             {result.technologies.length} technolog{result.technologies.length === 1 ? "y" : "ies"} detected
           </div>
+
+          {result.botBlock.blocked && (
+            <div className="bot-block-banner">
+              This scan was likely blocked by {result.botBlock.vendor ? `${result.botBlock.vendor}'s` : "this site's"} bot
+              protection, which returned a block page instead of the real site. The title, description, H1, and any content
+              below may reflect that block page rather than {result.finalUrl}&apos;s actual content.
+            </div>
+          )}
 
           <div className="page-info-card">
             <div className="page-info-row">
@@ -438,6 +616,154 @@ export default function Home() {
               <div className="psi-results">
                 <StrategyRow label="Mobile" result={psiResult.mobile} />
                 <StrategyRow label="Desktop" result={psiResult.desktop} />
+              </div>
+            )}
+          </div>
+
+          <div className="psi-section">
+            <div className="psi-header">
+              <h2>AI visibility check</h2>
+              <button type="button" onClick={handleAiVisibility} disabled={aiLoading}>
+                {aiLoading && <span className="spinner spinner-inline" aria-hidden="true" />}
+                {aiLoading ? "Checking…" : aiResult ? "Re-run" : "Check AI visibility"}
+              </button>
+            </div>
+            <p className="psi-subtext">
+              Queries ChatGPT, Claude, Gemini, and Perplexity directly with prompts you choose, and checks whether{" "}
+              {result.finalUrl} gets mentioned. Live snapshot only — not tracked over time. Up to 5 prompts, one per line.
+            </p>
+            <textarea
+              className="ai-prompts-input"
+              placeholder={"best alternatives to ...\nwho are the top companies for ...\nis ... worth it?"}
+              value={aiPrompts}
+              onChange={(e) => setAiPrompts(e.target.value)}
+              disabled={aiLoading}
+              rows={4}
+            />
+
+            {aiLoading && (
+              <div className="loading">
+                <span className="spinner" aria-hidden="true" />
+                Querying AI providers…
+              </div>
+            )}
+            {aiError && (
+              <div className="error-banner">
+                <div>{aiError}</div>
+                <button type="button" className="retry-btn" onClick={handleAiVisibility}>
+                  Try re-running the test
+                </button>
+              </div>
+            )}
+
+            {aiResult && (
+              <div className="ai-results">
+                <div className="ai-mention-rates">
+                  {aiResult.mentionRates.map((r) => (
+                    <div className="ai-rate-pill" key={r.provider}>
+                      <span className="ai-rate-label">{PROVIDER_LABELS[r.provider]}</span>
+                      <span className="ai-rate-value">
+                        {r.queriedCount === 0 ? "not configured" : `${r.mentionedCount}/${r.queriedCount} mentioned`}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+                {aiResult.promptResults.map((pr, i) => (
+                  <div className="ai-prompt-result" key={i}>
+                    <div className="ai-prompt-text">{pr.prompt}</div>
+                    <div className="ai-chip-row">
+                      {pr.results.map((r) => (
+                        <ProviderChip key={r.provider} result={r} />
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div className="psi-section">
+            <div className="psi-header">
+              <h2>SEO rank check</h2>
+            </div>
+            <p className="psi-subtext">
+              Checks where {result.finalUrl} currently ranks in Google for a keyword, plus top organic competitors and
+              related keyword ideas. Live snapshot, not tracked over time.
+            </p>
+            <form
+              className="scan-form"
+              onSubmit={(e) => {
+                e.preventDefault();
+                handleSeoRank();
+              }}
+            >
+              <input
+                type="text"
+                placeholder="e.g. handmade candles"
+                value={seoKeyword}
+                onChange={(e) => setSeoKeyword(e.target.value)}
+                disabled={seoLoading}
+              />
+              <button type="submit" disabled={seoLoading}>
+                {seoLoading && <span className="spinner spinner-inline" aria-hidden="true" />}
+                {seoLoading ? "Checking…" : "Check rank"}
+              </button>
+            </form>
+
+            {seoLoading && (
+              <div className="loading">
+                <span className="spinner" aria-hidden="true" />
+                Checking Google search results…
+              </div>
+            )}
+            {seoError && (
+              <div className="error-banner">
+                <div>{seoError}</div>
+                <button type="button" className="retry-btn" onClick={handleSeoRank}>
+                  Try re-running the test
+                </button>
+              </div>
+            )}
+
+            {seoResult && (
+              <div className="seo-results">
+                <div className="seo-rank-badge">
+                  {seoResult.rank ? (
+                    <>
+                      Ranked <strong>#{seoResult.rank}</strong> for &quot;{seoResult.keyword}&quot;
+                    </>
+                  ) : (
+                    <>Not found in the top 100 results for &quot;{seoResult.keyword}&quot;</>
+                  )}
+                </div>
+
+                {seoResult.topResults.length > 0 && (
+                  <div className="seo-organic-block">
+                    <div className="audit-group-title">Top organic results</div>
+                    <ol className="seo-organic-list">
+                      {seoResult.topResults.map((r) => (
+                        <li key={r.position} className={r.link === seoResult.matchedUrl ? "seo-matched" : ""}>
+                          <a href={r.link} target="_blank" rel="noopener noreferrer">
+                            {r.title || r.link}
+                          </a>
+                        </li>
+                      ))}
+                    </ol>
+                  </div>
+                )}
+
+                {(seoResult.relatedSearches.length > 0 || seoResult.peopleAlsoAsk.length > 0) && (
+                  <div className="seo-keyword-ideas">
+                    <div className="audit-group-title">Keyword ideas</div>
+                    <div className="seo-chip-row">
+                      {[...seoResult.relatedSearches, ...seoResult.peopleAlsoAsk].slice(0, 12).map((q, i) => (
+                        <span className="seo-idea-chip" key={i}>
+                          {q}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </div>

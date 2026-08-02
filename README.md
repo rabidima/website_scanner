@@ -67,6 +67,42 @@ free key (no billing required, 25,000 requests/day). It'll technically work
 without a key too, but unauthenticated PSI requests share a very small
 global quota and will get rate-limited almost immediately under real use.
 
+## AI visibility check (ChatGPT / Claude / Gemini / Perplexity)
+
+An opt-in section that queries OpenAI, Anthropic, Google Gemini, and Perplexity
+directly — no data-reseller markup — with up to 5 prompts you choose, and checks
+whether the scanned domain gets mentioned in each response. Reports, per prompt
+and per provider: mentioned yes/no, a snippet of the mention, any cited URL
+pointing back at the domain (structural citations from providers that support
+it, like Perplexity's Sonar models, or regex-extracted from the response text
+otherwise), and a lightweight keyword-based sentiment heuristic (positive/
+neutral/negative — not a real NLP model, documented as such in the UI).
+
+This is a **live snapshot, not a historical tracker** — there's no database, so
+nothing is stored between requests. Each provider is independently optional:
+set any subset of `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` / `GEMINI_API_KEY` /
+`PERPLEXITY_API_KEY` and the rest just show as "not configured" instead of
+failing the check. See `.env.example` for where to get each key. Implementation:
+`lib/ai-visibility.ts`, route: `app/api/ai-visibility/route.ts`.
+
+## SEO rank check (Serper.dev)
+
+A second opt-in section: enter a keyword, and it checks where the scanned
+domain currently ranks in Google for that keyword (via Serper.dev's SERP API),
+alongside the top 10 organic competitors and related-search / People Also Ask
+terms as lightweight keyword-research ideas. Also a **live snapshot, not a
+tracker** — same no-database caveat as AI visibility. Requires `SERPER_API_KEY`
+(free tier: 2,500 credits, no card required). Implementation: `lib/serper.ts`,
+route: `app/api/seo-rank/route.ts`.
+
+**Explicitly out of scope for this pass**: backlink data (Serper is a SERP
+scraper, not a link index — would need a separate vendor like Majestic's
+self-serve API) and a deeper crawl-based technical site audit (partially
+covered today by the existing PageSpeed Insights SEO category and the
+title/meta/H1 extraction, but not a full audit). True historical rank/prompt
+tracking (day-over-day trends) would need a Postgres database and a scheduled
+job — see "No scan history / persistence" below.
+
 ## What it detects (v0.1 signature set)
 
 CMS: WordPress, Shopify, Wix, Squarespace, Webflow, Drupal, Joomla, Ghost, HubSpot CMS.

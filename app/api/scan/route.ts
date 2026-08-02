@@ -4,6 +4,7 @@ import { detectTechnologies } from "@/lib/detect";
 import { resolveCorsOrigin, corsHeaders } from "@/lib/cors";
 import { extractPageInfo } from "@/lib/extract-meta";
 import { checkLlmsTxt } from "@/lib/llms-txt";
+import { detectBotBlock } from "@/lib/waf-detect";
 
 // This route resolves DNS and streams a raw fetch response, which needs the
 // full Node.js runtime (not the Edge runtime).
@@ -77,6 +78,13 @@ export async function POST(req: NextRequest) {
     // scanned, and its own check never throws (failures just come back as
     // "not found") — safe to await inline without its own try/catch.
     const llmsTxt = await checkLlmsTxt(result.finalUrl);
+    // Some sites (large news portals, banks, big e-commerce) sit behind bot
+    // management that returns HTTP 200 with a block page instead of a real
+    // 403 — deliberately, so naive scrapers can't tell they were blocked.
+    // Flag that here so the UI can explain what's actually being displayed
+    // instead of silently showing the block page's title/H1 as if it were
+    // the site's real content.
+    const botBlock = detectBotBlock(result.html, result.headers, result.cookies, technologies.length);
 
     return json(
       {
@@ -87,6 +95,7 @@ export async function POST(req: NextRequest) {
         technologies,
         page,
         llmsTxt,
+        botBlock,
         meta: {
           server: result.headers["server"] ?? null,
           poweredBy: result.headers["x-powered-by"] ?? null,
