@@ -164,21 +164,49 @@ interface RawQueryResult {
   citations: string[];
 }
 
+// Pulls the actual error message out of a failed provider response instead of
+// just the HTTP status code. Every provider shapes its error body slightly
+// differently (OpenAI/Perplexity: error.message, Anthropic: error.message
+// under a different envelope, Gemini: error.message too but nested one level
+// deeper) — this tries the common shapes and falls back to a raw text
+// snippet, then the bare status, so a stale model name (404), an empty
+// billing balance (429/400 depending on provider), or a bad key (401) are
+// distinguishable at a glance instead of all looking like "error (xxx)".
+async function describeApiError(res: Response, providerLabel: string): Promise<string> {
+  let detail = "";
+  try {
+    const body = await res.clone().json();
+    detail =
+      body?.error?.message ||
+      body?.error?.error?.message ||
+      body?.message ||
+      (typeof body?.error === "string" ? body.error : "");
+  } catch {
+    try {
+      const raw = await res.text();
+      detail = raw.slice(0, 200);
+    } catch {
+      detail = "";
+    }
+  }
+  return detail ? `${providerLabel} API error (${res.status}): ${detail}` : `${providerLabel} API error (${res.status})`;
+}
+
 async function queryOpenAi(prompt: string, apiKey: string): Promise<RawQueryResult> {
-  const model = process.env.OPENAI_MODEL || "gpt-4o-mini";
+  const model = process.env.OPENAI_MODEL || "gpt-5-mini";
   const res = await fetchWithTimeout("https://api.openai.com/v1/chat/completions", {
     method: "POST",
     headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
     body: JSON.stringify({ model, messages: [{ role: "user", content: prompt }], max_tokens: 500 }),
   });
-  if (!res.ok) throw new Error(`OpenAI API error (${res.status})`);
+  if (!res.ok) throw new Error(await describeApiError(res, "OpenAI"));
   const data = await res.json();
   const text = data?.choices?.[0]?.message?.content ?? "";
   return { text, citations: [] };
 }
 
 async function queryAnthropic(prompt: string, apiKey: string): Promise<RawQueryResult> {
-  const model = process.env.ANTHROPIC_MODEL || "claude-3-5-haiku-20241022";
+  const model = process.env.ANTHROPIC_MODEL || "claude-haiku-4-5-20251001";
   const res = await fetchWithTimeout("https://api.anthropic.com/v1/messages", {
     method: "POST",
     headers: {
@@ -188,14 +216,14 @@ async function queryAnthropic(prompt: string, apiKey: string): Promise<RawQueryR
     },
     body: JSON.stringify({ model, max_tokens: 500, messages: [{ role: "user", content: prompt }] }),
   });
-  if (!res.ok) throw new Error(`Anthropic API error (${res.status})`);
+  if (!res.ok) throw new Error(await describeApiError(res, "Anthropic"));
   const data = await res.json();
   const text = data?.content?.[0]?.text ?? "";
   return { text, citations: [] };
 }
 
 async function queryGemini(prompt: string, apiKey: string): Promise<RawQueryResult> {
-  const model = process.env.GEMINI_MODEL || "gemini-1.5-flash";
+  const model = process.env.GEMINI_MODEL || "gemini-3.5-flash";
   const res = await fetchWithTimeout(
     `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
     {
@@ -204,7 +232,7 @@ async function queryGemini(prompt: string, apiKey: string): Promise<RawQueryResu
       body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }),
     }
   );
-  if (!res.ok) throw new Error(`Gemini API error (${res.status})`);
+  if (!res.ok) throw new Error(await describeApiError(res, "Gemini"));
   const data = await res.json();
   const text = data?.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
   return { text, citations: [] };
@@ -217,7 +245,7 @@ async function queryPerplexity(prompt: string, apiKey: string): Promise<RawQuery
     headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
     body: JSON.stringify({ model, messages: [{ role: "user", content: prompt }] }),
   });
-  if (!res.ok) throw new Error(`Perplexity API error (${res.status})`);
+  if (!res.ok) throw new Error(await describeApiError(res, "Perplexity"));
   const data = await res.json();
   const text = data?.choices?.[0]?.message?.content ?? "";
   // Sonar models return a top-level "citations" array of source URLs.

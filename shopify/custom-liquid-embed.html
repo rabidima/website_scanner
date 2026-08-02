@@ -190,6 +190,9 @@
     .stackscan-widget .ss-ai-chip.mentioned.negative { border-color: #d1443f; color: #a12a2a; }
     .stackscan-widget .ss-ai-chip.errored { border-color: #d1443f; color: #a12a2a; }
     .stackscan-widget .ss-ai-chip a { color: inherit; margin-left: 2px; }
+    .stackscan-widget .ss-ai-error-details { margin-top: 8px; display: flex; flex-direction: column; gap: 4px; }
+    .stackscan-widget .ss-ai-error-detail-line { font-size: 11px; color: #a12a2a; line-height: 1.4; }
+    .stackscan-widget .ss-ai-error-detail-line strong { font-weight: 700; }
     .stackscan-widget .ss-seo-results { margin-top: 16px; display: flex; flex-direction: column; gap: 14px; }
     .stackscan-widget .ss-seo-rank-badge { font-size: 14px; }
     .stackscan-widget .ss-seo-organic-list { margin: 8px 0 0; padding-left: 18px; font-size: 13px; display: flex; flex-direction: column; gap: 10px; }
@@ -588,6 +591,21 @@
           row.className = "ss-ai-chip-row";
           (pr.results || []).forEach(function (r) { row.appendChild(providerChip(r)); });
           block.appendChild(row);
+          var errored = (pr.results || []).filter(function (r) { return r.error; });
+          if (errored.length > 0) {
+            var errDetails = document.createElement("div");
+            errDetails.className = "ss-ai-error-details";
+            errored.forEach(function (r) {
+              var line = document.createElement("div");
+              line.className = "ss-ai-error-detail-line";
+              var strong = document.createElement("strong");
+              strong.textContent = (PROVIDER_LABELS[r.provider] || r.provider) + ": ";
+              line.appendChild(strong);
+              line.appendChild(document.createTextNode(r.error));
+              errDetails.appendChild(line);
+            });
+            block.appendChild(errDetails);
+          }
           aiResultsBox.appendChild(block);
         });
       }

@@ -673,6 +673,23 @@ body {
   font-weight: 400;
 }
 
+.ai-error-details {
+  margin-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.ai-error-detail-line {
+  font-size: 0.78rem;
+  color: var(--danger);
+  line-height: 1.4;
+}
+
+.ai-error-detail-line strong {
+  font-weight: 600;
+}
+
 .seo-results {
   margin-top: 20px;
   display: flex;

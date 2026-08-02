@@ -705,6 +705,17 @@ export default function Home() {
                         <ProviderChip key={r.provider} result={r} />
                       ))}
                     </div>
+                    {pr.results.some((r) => r.error) && (
+                      <div className="ai-error-details">
+                        {pr.results
+                          .filter((r) => r.error)
+                          .map((r) => (
+                            <div className="ai-error-detail-line" key={r.provider}>
+                              <strong>{PROVIDER_LABELS[r.provider]}:</strong> {r.error}
+                            </div>
+                          ))}
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>

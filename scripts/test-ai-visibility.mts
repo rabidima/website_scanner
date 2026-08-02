@@ -88,6 +88,35 @@ async function run() {
   const capped = await runAiVisibilityCheck("acmecandles.com", manyPrompts, { openai: "sk-test" });
   check("Caps prompts at 5 even when more are submitted", capped.promptResults.length === 5, String(capped.promptResults.length));
 
+  // Case 6: each provider's real error envelope shape is unwrapped into a
+  // readable message, not just left as a bare status code. This matters in
+  // practice — a stale/retired model name, an empty billing balance, and a
+  // bad key can all return the same HTTP status for a given provider, so the
+  // body's actual message is what makes the error self-diagnosing.
+  mockFetch(async (url: string) => {
+    if (url.includes("api.openai.com")) {
+      return new Response(JSON.stringify({ error: { message: "You exceeded your current quota.", type: "insufficient_quota" } }), { status: 429 });
+    }
+    if (url.includes("api.anthropic.com")) {
+      return new Response(JSON.stringify({ type: "error", error: { type: "invalid_request_error", message: "Your credit balance is too low to access the Anthropic API." } }), { status: 400 });
+    }
+    if (url.includes("generativelanguage.googleapis.com")) {
+      return new Response(JSON.stringify({ error: { code: 404, message: "models/gemini-1.5-flash is not found for API version v1beta.", status: "NOT_FOUND" } }), { status: 404 });
+    }
+    throw new Error("unexpected provider call: " + url);
+  });
+  const withDetailedErrors = await runAiVisibilityCheck("acmecandles.com", ["is this brand worth it?"], {
+    openai: "sk-test",
+    anthropic: "sk-ant-test",
+    gemini: "test-key",
+  });
+  const oaiErr = withDetailedErrors.promptResults[0].results.find((r) => r.provider === "openai")!;
+  const anthErr = withDetailedErrors.promptResults[0].results.find((r) => r.provider === "anthropic")!;
+  const gemErr = withDetailedErrors.promptResults[0].results.find((r) => r.provider === "gemini")!;
+  check("OpenAI quota error includes the real reason, not just the status", (oaiErr.error ?? "").includes("exceeded your current quota"), oaiErr.error ?? "null");
+  check("Anthropic low-balance error is unwrapped from its nested envelope", (anthErr.error ?? "").includes("credit balance is too low"), anthErr.error ?? "null");
+  check("Gemini stale-model error names the actual missing model", (gemErr.error ?? "").includes("gemini-1.5-flash is not found"), gemErr.error ?? "null");
+
   global.fetch = realFetch;
 
   console.log(`\n${failures === 0 ? "All AI visibility cases passed." : `${failures} case(s) failed.`}`);
