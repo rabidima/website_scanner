@@ -468,15 +468,12 @@ export default function Home() {
 
   async function handleAiVisibility() {
     if (!result || aiLoading) return;
-    const prompts = aiPrompts
-      .split("\n")
-      .map((p) => p.trim())
-      .filter(Boolean)
-      .slice(0, 5);
-    if (prompts.length === 0) {
-      setAiError("Enter at least one prompt, one per line.");
+    const trimmedPrompt = aiPrompts.trim();
+    if (!trimmedPrompt) {
+      setAiError("Enter a prompt.");
       return;
     }
+    const prompts = [trimmedPrompt];
     setAiLoading(true);
     setAiError(null);
 
@@ -617,7 +614,7 @@ export default function Home() {
 
           <div className="psi-section">
             <div className="psi-header">
-              <h2>Diagnose performance issues</h2>
+              <h2>Diagnose performance issues for {result.finalUrl}</h2>
               <button type="button" onClick={handlePageSpeed} disabled={psiLoading}>
                 {psiLoading && <span className="spinner spinner-inline" aria-hidden="true" />}
                 {psiLoading ? "Running…" : psiResult ? "Re-run" : "Run diagnostics"}
@@ -659,16 +656,16 @@ export default function Home() {
               </button>
             </div>
             <p className="psi-subtext">
-              Queries ChatGPT, Claude, Gemini, and Perplexity directly with prompts you choose, and checks whether{" "}
-              {result.finalUrl} gets mentioned. Live snapshot only — not tracked over time. Up to 5 prompts, one per line.
+              Queries ChatGPT, Claude, Gemini, and Perplexity directly with a prompt you choose, and checks whether{" "}
+              {result.finalUrl} gets mentioned. Live snapshot only — not tracked over time.
             </p>
-            <textarea
+            <input
+              type="text"
               className="ai-prompts-input"
-              placeholder={"best alternatives to ...\nwho are the top companies for ...\nis ... worth it?"}
+              placeholder="e.g. is ... worth it?"
               value={aiPrompts}
               onChange={(e) => setAiPrompts(e.target.value)}
               disabled={aiLoading}
-              rows={4}
             />
 
             {aiLoading && (

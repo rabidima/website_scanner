@@ -148,12 +148,6 @@
       margin-top: 20px; display: flex; flex-direction: column; gap: 16px;
       border: 1px solid #ddd; padding: 20px; border-radius: 10px;
     }
-    /* Before "Run diagnostics" is clicked, this div is empty — without this
-       rule it still renders its border/padding, so it looks like an empty
-       (and confusingly non-clickable) input box sitting on the page. */
-    .stackscan-widget .ss-psi-results:empty {
-      border: none; padding: 0; margin-top: 0;
-    }
     .stackscan-widget .ss-psi-strategy-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--ss-text-muted); margin-bottom: 8px; font-weight: 600; }
     .stackscan-widget .ss-gauge-row { display: flex; gap: 20px; flex-wrap: wrap; }
     .stackscan-widget .ss-gauge { display: flex; flex-direction: column; align-items: center; gap: 4px; min-width: 84px; }
@@ -173,9 +167,9 @@
     .stackscan-widget .ss-audit-list { list-style: none; margin: 0; padding: 0; }
     .stackscan-widget .ss-audit-list li { font-size: 12px; padding: 2px 0; }
     .stackscan-widget .ss-audit-list li::before { content: "\00b7 "; color: #a12a2a; }
-    .stackscan-widget textarea {
+    .stackscan-widget #ss-ai-prompts {
       width: 100%; margin-top: 10px; border: 1px solid var(--ss-border); border-radius: var(--ss-radius);
-      padding: 10px 12px; font-size: 13px; font-family: inherit; resize: vertical; box-sizing: border-box;
+      padding: 10px 12px; font-size: 13px; font-family: inherit; box-sizing: border-box;
     }
     .stackscan-widget .ss-ai-results { margin-top: 16px; display: flex; flex-direction: column; gap: 12px; }
     .stackscan-widget .ss-ai-rates { display: flex; flex-wrap: wrap; gap: 8px; }
@@ -248,7 +242,7 @@
 
   <div class="ss-psi" id="ss-psi" style="display:none;">
     <div class="ss-psi-header">
-      <h3>Diagnose performance issues</h3>
+      <h3 id="ss-psi-heading">Diagnose performance issues</h3>
       <button id="ss-psi-go" type="button">Run diagnostics</button>
     </div>
     <p class="ss-psi-sub">Runs a Google PageSpeed Insights (Lighthouse Audit). Takes 10-30 seconds.</p>
@@ -262,8 +256,8 @@
       <h3>AI visibility check</h3>
       <button id="ss-ai-go" type="button">Check AI visibility</button>
     </div>
-    <p class="ss-psi-sub">Queries ChatGPT, Claude, Gemini, and Perplexity directly and checks whether your domain gets mentioned. Live snapshot only. Up to 5 prompts, one per line.</p>
-    <textarea id="ss-ai-prompts" rows="4" placeholder="best alternatives to ...&#10;who are the top companies for ...&#10;is ... worth it?"></textarea>
+    <p class="ss-psi-sub">Queries ChatGPT, Claude, Gemini, and Perplexity directly and checks whether your domain gets mentioned. Live snapshot only.</p>
+    <input type="text" id="ss-ai-prompts" placeholder="e.g. is ... worth it?" />
     <div class="ss-status" id="ss-ai-status"></div>
     <div id="ss-ai-error" style="display:none;" class="ss-error"></div>
     <div class="ss-ai-results" id="ss-ai-results"></div>
@@ -307,6 +301,7 @@
       var llmsBox = document.getElementById("ss-llms");
       var results = document.getElementById("ss-results");
       var psiSection = document.getElementById("ss-psi");
+      var psiHeading = document.getElementById("ss-psi-heading");
       var psiGoButton = document.getElementById("ss-psi-go");
       var psiStatus = document.getElementById("ss-psi-status");
       var psiErrorBox = document.getElementById("ss-psi-error");
@@ -636,11 +631,12 @@
 
       function runAiVisibility() {
         if (!lastScannedUrl) return;
-        var prompts = aiPromptsInput.value.split("\n").map(function (p) { return p.trim(); }).filter(Boolean).slice(0, 5);
-        if (prompts.length === 0) {
-          showError(aiErrorBox, "Enter at least one prompt, one per line.", runAiVisibility);
+        var trimmedPrompt = aiPromptsInput.value.trim();
+        if (!trimmedPrompt) {
+          showError(aiErrorBox, "Enter a prompt.", runAiVisibility);
           return;
         }
+        var prompts = [trimmedPrompt];
         aiErrorBox.style.display = "none";
         aiResultsBox.innerHTML = "";
         aiStatus.innerHTML = "";
@@ -1056,6 +1052,7 @@
             renderLlmsTxt(r.data.llmsTxt);
             render(r.data.technologies);
             lastScannedUrl = r.data.finalUrl;
+            psiHeading.textContent = "Diagnose performance issues for " + r.data.finalUrl;
             psiGoButton.textContent = "Run diagnostics";
             psiSection.style.display = "block";
             aiGoButton.textContent = "Check AI visibility";
@@ -1075,6 +1072,9 @@
       });
       psiGoButton.addEventListener("click", runPageSpeed);
       aiGoButton.addEventListener("click", runAiVisibility);
+      aiPromptsInput.addEventListener("keydown", function (e) {
+        if (e.key === "Enter") runAiVisibility();
+      });
       seoGoButton.addEventListener("click", runSeoRank);
       seoKeywordInput.addEventListener("keydown", function (e) {
         if (e.key === "Enter") runSeoRank();
