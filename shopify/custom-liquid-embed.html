@@ -148,6 +148,12 @@
       margin-top: 20px; display: flex; flex-direction: column; gap: 16px;
       border: 1px solid #ddd; padding: 20px; border-radius: 10px;
     }
+    /* Before "Run diagnostics" is clicked, this div is empty — without this
+       rule it still renders its border/padding, so it looks like an empty
+       (and confusingly non-clickable) input box sitting on the page. */
+    .stackscan-widget .ss-psi-results:empty {
+      border: none; padding: 0; margin-top: 0;
+    }
     .stackscan-widget .ss-psi-strategy-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--ss-text-muted); margin-bottom: 8px; font-weight: 600; }
     .stackscan-widget .ss-gauge-row { display: flex; gap: 20px; flex-wrap: wrap; }
     .stackscan-widget .ss-gauge { display: flex; flex-direction: column; align-items: center; gap: 4px; min-width: 84px; }
