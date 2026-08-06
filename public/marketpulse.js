@@ -102,9 +102,19 @@
       setState("home");
       window.scrollTo({ top: 0 });
     }
-    document.getElementById("mpGoHomeBrand").addEventListener("click", goHome);
-    document.getElementById("mpGoHomeBtn").addEventListener("click", goHome);
-    document.getElementById("mpTryBtn").addEventListener("click", function () {
+    // Header/nav elements (brand logo, Home button, "Run a free scan" button)
+    // are optional — merchants using their theme's native header instead of
+    // this widget's own full-page nav (a legitimate choice; see the install
+    // comment at the top of this page's Liquid block) will have deleted the
+    // <header class="mp-topbar">...</header> block entirely. Guard every
+    // lookup so the rest of the widget still works when that markup is gone.
+    function onIfPresent(id, event, handler) {
+      var el = document.getElementById(id);
+      if (el) el.addEventListener(event, handler);
+    }
+    onIfPresent("mpGoHomeBrand", "click", goHome);
+    onIfPresent("mpGoHomeBtn", "click", goHome);
+    onIfPresent("mpTryBtn", "click", function () {
       if (widget.className.indexOf("state-home") === -1) { goHome(); }
       input.focus();
     });
