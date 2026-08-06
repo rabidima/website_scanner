@@ -507,6 +507,7 @@
 
         fetch(API_BASE + "/api/pagespeed", {
           method: "POST",
+          credentials: "include",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ url: lastScannedUrl })
         })
@@ -517,7 +518,7 @@
             setPsiButtonLoading(false, "Re-run");
             if (!r.ok) {
               psiStatus.textContent = "";
-              showError(psiErrorBox, r.data.error || "PageSpeed diagnostics failed.", runPageSpeed);
+              showError(psiErrorBox, r.data.message || r.data.error || "PageSpeed diagnostics failed.", runPageSpeed);
               return;
             }
             psiStatus.textContent = "";
@@ -648,6 +649,7 @@
 
         fetch(API_BASE + "/api/ai-visibility", {
           method: "POST",
+          credentials: "include",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ domain: lastScannedUrl, prompts: prompts })
         })
@@ -657,7 +659,7 @@
             aiGoButton.textContent = "Re-run";
             if (!r.ok) {
               aiStatus.textContent = "";
-              showError(aiErrorBox, r.data.error || "AI visibility check failed.", runAiVisibility);
+              showError(aiErrorBox, r.data.message || r.data.error || "AI visibility check failed.", runAiVisibility);
               return;
             }
             aiStatus.textContent = "";
@@ -861,6 +863,7 @@
 
         fetch(API_BASE + "/api/seo-rank", {
           method: "POST",
+          credentials: "include",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ domain: lastScannedUrl, keyword: keyword })
         })
@@ -869,7 +872,7 @@
             seoGoButton.disabled = false;
             if (!r.ok) {
               seoStatus.textContent = "";
-              showError(seoErrorBox, r.data.error || "Rank check failed.", runSeoRank);
+              showError(seoErrorBox, r.data.message || r.data.error || "Rank check failed.", runSeoRank);
               return;
             }
             seoStatus.textContent = "";
@@ -1032,6 +1035,7 @@
 
         fetch(API_BASE + "/api/scan", {
           method: "POST",
+          credentials: "include",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ url: url })
         })
@@ -1042,7 +1046,7 @@
             button.disabled = false;
             if (!r.ok) {
               status.textContent = "";
-              showError(errorBox, r.data.error || "Scan failed.", scan);
+              showError(errorBox, r.data.message || r.data.error || "Scan failed.", scan);
               return;
             }
             status.textContent = "Scanned " + r.data.finalUrl + " · HTTP " + r.data.statusCode +

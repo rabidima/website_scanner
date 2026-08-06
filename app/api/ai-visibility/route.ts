@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { runAiVisibilityCheck } from "@/lib/ai-visibility";
 import { resolveCorsOrigin, corsHeaders } from "@/lib/cors";
+import { checkScanAccess, freeScanUsedCookie } from "@/lib/gate";
 
 export const runtime = "nodejs";
 // Querying up to 4 LLM providers for up to 5 prompts (run in parallel, but
@@ -31,11 +32,20 @@ export async function OPTIONS(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const origin = resolveCorsOrigin(req.headers.get("origin"));
   const headers = corsHeaders(origin);
-  const json = (body: unknown, status: number) => NextResponse.json(body, { status, headers });
+  const json = (body: unknown, status: number, extraHeaders?: Record<string, string>) =>
+    NextResponse.json(body, { status, headers: { ...headers, ...extraHeaders } });
 
   const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "unknown";
   if (isRateLimited(ip)) {
     return json({ error: "Too many AI visibility checks from this IP. Try again in a minute." }, 429);
+  }
+
+  const access = checkScanAccess(req);
+  if (!access.allowed) {
+    return json(
+      { error: "gate", message: "You've used your free scan. Enter your email to keep scanning." },
+      403
+    );
   }
 
   let body: { domain?: string; prompts?: string[] };
@@ -70,5 +80,9 @@ export async function POST(req: NextRequest) {
   }
 
   const result = await runAiVisibilityCheck(domain, prompts, apiKeys);
-  return json(result, 200);
+  return json(
+    result,
+    200,
+    access.grantFreeScanCookie ? { "Set-Cookie": freeScanUsedCookie() } : undefined
+  );
 }
