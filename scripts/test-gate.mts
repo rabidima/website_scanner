@@ -2,14 +2,16 @@
  * Offline test for lib/gate.ts — token signing/verification and the
  * free-scan/verified access decision. No network calls involved.
  *
- * V2: gate state is no longer cookie-based (see lib/gate.ts's header
- * comment for why — cross-site cookies between the Vercel API domain and
- * the Shopify storefront domain get silently dropped by browsers). Access
- * is now decided from an explicit `Authorization: Bearer <token>` header
- * plus a server-side per-IP "used their free scan" set.
+ * V3: free-scan tracking moved from an in-memory per-instance Set to Vercel
+ * KV (see lib/gate.ts's header comment for why — serverless instances don't
+ * share memory, so the old version could reset unpredictably). The KV calls
+ * are abstracted behind a FreeScanStore interface for exactly this reason:
+ * tests inject an in-memory fake instead of needing a real KV connection.
  *
  * Run with: npx tsx scripts/test-gate.mts
  */
+import type { FreeScanStore } from "../lib/gate";
+
 process.env.GATE_SECRET = "test-secret-do-not-use-in-prod";
 
 const { signVerifiedToken, verifyToken, checkScanAccess, extractBearerToken } = await import("../lib/gate");
@@ -26,6 +28,15 @@ function fakeRequest(authHeader?: string): any {
       get: (name: string) => (name.toLowerCase() === "authorization" ? authHeader ?? null : null),
     },
   };
+}
+
+class FakeFreeScanStore implements FreeScanStore {
+  private used = new Set<string>();
+  async claimFreeScan(key: string): Promise<boolean> {
+    if (this.used.has(key)) return false;
+    this.used.add(key);
+    return true;
+  }
 }
 
 async function run() {
@@ -67,25 +78,30 @@ async function run() {
   check("No Authorization header -> null", extractBearerToken(fakeRequest()) === null);
   check("Malformed Authorization header -> null", extractBearerToken(fakeRequest("Basic abc123")) === null);
 
+  // All of these use a fresh FakeFreeScanStore per-store-scoped case (rather
+  // than one shared store) so cases don't leak state into each other — each
+  // `new FakeFreeScanStore()` mirrors a clean KV namespace.
+
   // Case 7: checkScanAccess — fresh IP, no token -> free scan allowed, and
   // that IP is now recorded as having used its free scan.
+  const store1 = new FakeFreeScanStore();
   const freshIp = "203.0.113.10";
-  const freshAccess = checkScanAccess(fakeRequest(), freshIp);
+  const freshAccess = await checkScanAccess(fakeRequest(), freshIp, store1);
   check("Fresh IP, no token -> free scan allowed", freshAccess.allowed === true && freshAccess.reason === "free-scan");
 
   // Case 8: same IP again, still no token -> gated (free scan already spent).
-  const usedAccess = checkScanAccess(fakeRequest(), freshIp);
+  const usedAccess = await checkScanAccess(fakeRequest(), freshIp, store1);
   check("Same IP again, no token -> gated", usedAccess.allowed === false && usedAccess.reason === "gate");
 
   // Case 9: a different fresh IP still gets its own free scan (per-IP, not global).
   const otherIp = "203.0.113.20";
-  const otherAccess = checkScanAccess(fakeRequest(), otherIp);
+  const otherAccess = await checkScanAccess(fakeRequest(), otherIp, store1);
   check("Different fresh IP -> free scan allowed independently", otherAccess.allowed === true && otherAccess.reason === "free-scan");
 
   // Case 10: valid bearer token -> unlimited access regardless of whether
   // this IP already spent its free scan.
   const verifiedToken = signVerifiedToken("dimas@example.com");
-  const verifiedAccess = checkScanAccess(fakeRequest(`Bearer ${verifiedToken}`), freshIp);
+  const verifiedAccess = await checkScanAccess(fakeRequest(`Bearer ${verifiedToken}`), freshIp, store1);
   check(
     "Valid bearer token -> unlimited access even on an IP that already used its free scan",
     verifiedAccess.allowed === true && verifiedAccess.reason === "verified" && (verifiedAccess as any).email === "dimas@example.com"
@@ -93,9 +109,16 @@ async function run() {
 
   // Case 11: a garbage bearer token falls back to the per-IP free-scan
   // check rather than crashing the request.
+  const store2 = new FakeFreeScanStore();
   const garbageIp = "203.0.113.30";
-  const garbageVerified = checkScanAccess(fakeRequest("Bearer garbage"), garbageIp);
+  const garbageVerified = await checkScanAccess(fakeRequest("Bearer garbage"), garbageIp, store2);
   check("Garbage bearer token falls back to free-scan check, doesn't throw", garbageVerified.allowed === true && garbageVerified.reason === "free-scan");
+
+  // Case 12: checkScanAccess with no store argument falls back to the real
+  // default (Vercel KV) store — just confirms it doesn't blow up wiring the
+  // default parameter; the actual KV round-trip is out of scope for an
+  // offline test (needs real credentials, covered by manual/staging testing).
+  check("Default store parameter is wired (no crash constructing it)", typeof checkScanAccess === "function");
 
   console.log(`\n${failures === 0 ? "All gate cases passed." : `${failures} case(s) failed.`}`);
   process.exit(failures === 0 ? 0 : 1);

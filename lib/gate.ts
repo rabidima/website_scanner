@@ -1,5 +1,14 @@
 import crypto from "node:crypto";
 import { NextRequest } from "next/server";
+import { Redis } from "@upstash/redis";
+
+// Vercel KV as a standalone product is discontinued — Redis now lives under
+// Vercel Marketplace, provisioned via Upstash. @vercel/kv (the old wrapper)
+// is deprecated too, so this talks to @upstash/redis directly. fromEnv()
+// reads UPSTASH_REDIS_REST_URL/TOKEN, falling back to KV_REST_API_URL/TOKEN
+// — which is exactly what the Marketplace integration injects, so no env
+// var renaming is needed on the Vercel side.
+const kv = Redis.fromEnv();
 
 /**
  * Free-scan-then-email-unlock gate.
@@ -14,17 +23,20 @@ import { NextRequest } from "next/server";
  * request, so the gate looked like it wasn't working — every visit looked
  * like a fresh one.
  *
- * V2 (this version) doesn't rely on the browser automatically attaching
- * anything cross-site:
- *  - "Have they had their free scan yet" is tracked server-side, keyed by IP,
- *    in-memory — same best-effort-per-instance pattern as the rate limiters
- *    in the API routes (resets on cold start, not a hard guarantee, but
- *    doesn't depend on any client storage the browser might block).
- *  - "Are they verified" is a signed token returned in the /api/lead JSON
- *    response body. The client stores it itself (localStorage — first-party,
- *    never blocked) and sends it back explicitly on every scan request via
- *    `Authorization: Bearer <token>`. Nothing here depends on the browser's
- *    cookie jar at all.
+ * V2 dropped cookies but tracked "have they had their free scan yet" in an
+ * in-memory Set, keyed by IP. That turned out to be leaky in its own way:
+ * Vercel runs serverless functions across multiple isolated instances with
+ * no shared memory, so a retry (incognito, or just an unlucky cold start)
+ * could land on an instance whose Set never saw that IP — the gate would
+ * silently reset even though nothing about the visitor actually changed.
+ *
+ * V3 (this version) moves free-scan tracking into Vercel KV (Upstash Redis),
+ * which every instance reads and writes the same way — no more per-instance
+ * drift. "Are they verified" is still a signed token returned in the
+ * /api/lead JSON response body; the client stores it itself (localStorage —
+ * first-party, never blocked) and sends it back explicitly on every scan
+ * request via `Authorization: Bearer <token>`. Nothing here depends on the
+ * browser's cookie jar at all.
  */
 
 const VERIFIED_MAX_AGE_SEC = 60 * 60 * 24 * 180; // 180 days
@@ -88,12 +100,40 @@ export function extractBearerToken(req: NextRequest): string | null {
   return match ? match[1] : null;
 }
 
-// In-memory, per-instance IP set. Same caveat as the rate limiters: resets on
-// cold start / redeploy, and IPs behind shared NAT (offices, cafes, carrier
-// NAT) will affect each other. That's an acceptable MVP tradeoff — this is
-// an abuse deterrent, not a hard security boundary, same tier of leniency as
-// the old cookie-based version had.
-const freeScanUsedByIp = new Set<string>();
+// Free scan resets every 24h per IP. Not "once ever" on purpose — offices,
+// cafes, and carrier NAT put many real visitors behind one IP, and a hard
+// lifetime cap would gate out people who never got their own free scan in
+// the first place. 24h is generous enough to be fair, tight enough that
+// incognito/cold-start no longer lets the same visitor re-trigger it in the
+// same sitting the way the old in-memory version accidentally allowed.
+const FREE_SCAN_TTL_SEC = 60 * 60 * 24;
+
+/**
+ * Abstraction over "has this key already used its free scan today" so the
+ * gate logic can be unit tested without a real KV connection — tests inject
+ * an in-memory fake implementing the same interface.
+ */
+export interface FreeScanStore {
+  /** Returns true if this call is the one claiming the free scan (i.e. it's
+   *  allowed); false if it's already been claimed within the TTL window. */
+  claimFreeScan(key: string): Promise<boolean>;
+}
+
+class KvFreeScanStore implements FreeScanStore {
+  async claimFreeScan(key: string): Promise<boolean> {
+    const redisKey = `free-scan:${key}`;
+    const count = await kv.incr(redisKey);
+    if (count === 1) {
+      // Only set the expiry on the first hit — repeat hits within the window
+      // shouldn't push the TTL back out, or a determined visitor could keep
+      // themselves permanently gated-free by scanning right before it expires.
+      await kv.expire(redisKey, FREE_SCAN_TTL_SEC);
+    }
+    return count === 1;
+  }
+}
+
+const defaultFreeScanStore: FreeScanStore = new KvFreeScanStore();
 
 export type ScanAccess =
   | { allowed: true; reason: "verified"; email: string }
@@ -101,14 +141,18 @@ export type ScanAccess =
   | { allowed: false; reason: "gate" };
 
 /** Decides whether a scan is allowed for this request + client IP. */
-export function checkScanAccess(req: NextRequest, ip: string): ScanAccess {
+export async function checkScanAccess(
+  req: NextRequest,
+  ip: string,
+  store: FreeScanStore = defaultFreeScanStore
+): Promise<ScanAccess> {
   const verified = verifyToken(extractBearerToken(req));
   if (verified) {
     return { allowed: true, reason: "verified", email: verified.email };
   }
 
-  if (!freeScanUsedByIp.has(ip)) {
-    freeScanUsedByIp.add(ip);
+  const gotFreeScan = await store.claimFreeScan(ip);
+  if (gotFreeScan) {
     return { allowed: true, reason: "free-scan" };
   }
 

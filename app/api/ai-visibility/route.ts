@@ -40,7 +40,7 @@ export async function POST(req: NextRequest) {
     return json({ error: "Too many AI visibility checks from this IP. Try again in a minute." }, 429);
   }
 
-  const access = checkScanAccess(req, ip);
+  const access = await checkScanAccess(req, ip);
   if (!access.allowed) {
     return json(
       { error: "gate", message: "You've used your free scan. Enter your email to keep scanning." },

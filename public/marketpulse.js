@@ -73,6 +73,15 @@
     var upsellError = document.getElementById("mpUpsellError");
     var upsellGuarantee = document.getElementById("mpUpsellGuarantee");
     var upsellPill = document.getElementById("mpUpsellPill");
+    var upsellTitle = document.getElementById("mpUpsellTitle");
+    var upsellBody = document.getElementById("mpUpsellBody");
+    var upsellFeat = document.getElementById("mpUpsellFeat");
+    var gateTitle = document.getElementById("mpGateTitle");
+    var gateBody = document.getElementById("mpGateBody");
+    var urlError = document.getElementById("mpUrlError");
+    var subline = document.getElementById("mpSubline");
+    var recentWrap = document.getElementById("mpRecent");
+    var recentItems = document.getElementById("mpRecentItems");
 
     document.getElementById("mpChips").innerHTML = CATALOG.map(function (s) {
       return '<div class="mp-chip">' + iconSvg(s.icon, 15, 15) + s.name + "</div>";
@@ -97,6 +106,29 @@
       return v;
     }
     function hostOf(url) { return url.replace(/^https?:\/\//, "").replace(/\/.*$/, ""); }
+    // Catches obviously-not-a-website input ("asdfasdf", "hello world", empty)
+    // before we ever call the API — saves a free scan / a rate-limit hit on
+    // garbage, and gives instant feedback instead of a spinner then an error.
+    // Deliberately loose beyond this: real validation (DNS resolution, SSRF
+    // checks) happens server-side in /api/scan, this is just a sanity filter.
+    function isPlausibleWebsite(v) {
+      v = v.trim();
+      if (!v) return false;
+      if (/\s/.test(v)) return false;
+      var host = hostOf(normalizeUrl(v)).replace(/^www\./, "");
+      return /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/i.test(host);
+    }
+    function showUrlError(msg) {
+      if (!urlError) return;
+      urlError.textContent = msg;
+      urlError.style.display = "block";
+      if (subline) subline.style.display = "none";
+    }
+    function hideUrlError() {
+      if (!urlError) return;
+      urlError.style.display = "none";
+      if (subline) subline.style.display = "";
+    }
     // Auto-derived keyword/prompt: strip protocol + TLD, turn separators into
     // spaces. "acme-candles.com" -> "acme candles". Good enough as a sane
     // default — there's no keyword input in this flow, unlike the main widget.
@@ -160,6 +192,23 @@
       if (!results.classList.contains("show")) home.style.display = "";
     });
 
+    // Pulls the expiry back out of the token itself (rather than hardcoding
+    // "180 days" here too) so the displayed date always matches what the
+    // server actually signed, even if that TTL ever changes.
+    function decodeTokenExp(token) {
+      try {
+        var b64 = token.split(".")[0].replace(/-/g, "+").replace(/_/g, "/");
+        while (b64.length % 4) b64 += "=";
+        var json = JSON.parse(decodeURIComponent(escape(atob(b64))));
+        return typeof json.exp === "number" ? json.exp : null;
+      } catch (e) { return null; }
+    }
+    function formatUnlockDate(expMs) {
+      try {
+        return new Date(expMs).toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" });
+      } catch (e) { return ""; }
+    }
+
     function submitLead(email, onSuccess, onError) {
       fetch(API_BASE + "/api/lead", {
         method: "POST",
@@ -169,8 +218,12 @@
         .then(function (res) { return res.json().then(function (data) { return { ok: res.ok, data: data }; }); })
         .then(function (r) {
           if (!r.ok) { onError(r.data.message || r.data.error || "Couldn't verify that email."); return; }
-          if (r.data.token) setToken(r.data.token);
-          onSuccess();
+          var expMs = null;
+          if (r.data.token) {
+            setToken(r.data.token);
+            expMs = decodeTokenExp(r.data.token);
+          }
+          onSuccess(expMs);
         })
         .catch(function () { onError("Network error — try again in a moment."); });
     }
@@ -182,8 +235,14 @@
       btn.disabled = true;
       submitLead(
         email,
-        function () {
+        function (expMs) {
           btn.disabled = false;
+          if (gateTitle) gateTitle.textContent = "You're unlocked!";
+          if (gateBody) {
+            gateBody.textContent = expMs
+              ? "Thanks for signing up — unlimited scans until " + formatUnlockDate(expMs) + "."
+              : "Thanks for signing up — you have unlimited scans.";
+          }
           hideGateModal();
           if (pendingHost) startScan(pendingHost);
         },
@@ -203,9 +262,16 @@
       upsellError.style.display = "none";
       submitLead(
         email,
-        function () {
+        function (expMs) {
           btn.disabled = false;
           upsellPill.textContent = "✅ YOU'RE UNLOCKED";
+          if (upsellTitle) upsellTitle.textContent = "Thanks for signing up!";
+          if (upsellBody) {
+            upsellBody.textContent = expMs
+              ? "You have unlimited scans until " + formatUnlockDate(expMs) + ". Scan any site, any time — no limits, no card required."
+              : "You have unlimited scans — no limits, no card required.";
+          }
+          if (upsellFeat) upsellFeat.style.display = "none";
           upsellGuarantee.textContent = "Scan anything, anytime — no card, no limit.";
           upsellForm.style.display = "none";
         },
@@ -220,12 +286,19 @@
     form.addEventListener("submit", function (e) {
       e.preventDefault();
       var val = input.value.trim();
-      if (!val) { input.focus(); return; }
+      if (!val) { hideUrlError(); input.focus(); return; }
+      if (!isPlausibleWebsite(val)) {
+        showUrlError("Enter a real website, like yourbrand.com");
+        input.focus();
+        return;
+      }
+      hideUrlError();
       var url = normalizeUrl(val), host = hostOf(url);
       scanUrlEl.textContent = url;
       document.getElementById("mpResSite").innerHTML = "scan complete for <b>" + host + "</b>";
       startScan(host);
     });
+    input.addEventListener("input", hideUrlError);
 
     // ---- grading: turns raw API numbers into the card's score/grade/copy ----
     function tierClass(score) { return score >= 70 ? "mp-g-good" : score >= 40 ? "mp-g-mid" : "mp-g-bad"; }
@@ -372,14 +445,39 @@
       });
     }
 
+    // If they unlocked on a previous visit, the token's still sitting in
+    // localStorage — don't show the sales pitch again on this scan's
+    // results. Signature isn't checked here (that needs the server secret),
+    // this is purely cosmetic; the actual gate check server-side is what
+    // matters for access.
+    function currentUnlockExp() {
+      var token = getToken();
+      if (!token) return null;
+      var exp = decodeTokenExp(token);
+      return exp && Date.now() < exp ? exp : null;
+    }
+
     function showResults(host, results4) {
       overlay.classList.remove("show");
       home.style.display = "none";
       setState("results");
-      upsellPill.textContent = "🎉 THAT WAS YOUR FREE SCAN";
+
+      var unlockExp = currentUnlockExp();
+      if (unlockExp) {
+        upsellPill.textContent = "✅ YOU'RE UNLOCKED";
+        if (upsellTitle) upsellTitle.textContent = "You have unlimited scans";
+        if (upsellBody) upsellBody.textContent = "Unlimited scans until " + formatUnlockDate(unlockExp) + ".";
+        if (upsellFeat) upsellFeat.style.display = "none";
+        upsellForm.style.display = "none";
+      } else {
+        upsellPill.textContent = "🎉 THAT WAS YOUR FREE SCAN";
+        if (upsellTitle) upsellTitle.textContent = "Scan any site, as often as you want.";
+        if (upsellBody) upsellBody.textContent = "Leave your email and every future scan runs instantly — no limits, no card required. We'll also use it to let you know when new checks ship.";
+        if (upsellFeat) upsellFeat.style.display = "";
+        upsellForm.style.display = "";
+        upsellForm.reset();
+      }
       upsellGuarantee.textContent = "No card required · unsubscribe anytime";
-      upsellForm.style.display = "";
-      upsellForm.reset();
       upsellError.style.display = "none";
 
       var graders = { techstack: gradeTechStack, cwv: gradePsi, seo: gradeSeo, ai: gradeAi };
@@ -415,10 +513,57 @@
 
       results.classList.add("show");
       window.scrollTo({ top: 0 });
+      // Refresh the trust strip so this scan shows up in it too — the KV
+      // write is fire-and-forget server-side, so give it a beat first.
+      setTimeout(loadRecentScans, 1200);
     }
 
     document.querySelectorAll(".mp-widget img").forEach(function (im) {
       im.addEventListener("error", function () { im.style.visibility = "hidden"; });
       if (im.complete && im.naturalWidth === 0) im.style.visibility = "hidden";
     });
+
+    // ---- recent scans trust strip ----
+    // domain/technologies both come from constrained sources server-side
+    // (URL.hostname parsing and a fixed internal tech-name catalog, never
+    // raw user text) so this isn't actually an injection vector today — but
+    // this list is rendered to every visitor, not just the person who ran
+    // the scan, so it's escaped anyway rather than relying on that staying true.
+    function escapeHtml(s) {
+      return String(s).replace(/[&<>"']/g, function (c) {
+        return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
+      });
+    }
+    function formatRelativeTime(iso) {
+      var then = new Date(iso).getTime();
+      if (isNaN(then)) return "";
+      var diffSec = Math.max(0, Math.round((Date.now() - then) / 1000));
+      var min = Math.floor(diffSec / 60);
+      if (min < 1) return "just now";
+      if (min < 60) return min + " minute" + (min === 1 ? "" : "s") + " ago";
+      var hr = Math.floor(min / 60);
+      if (hr < 24) return hr + " hour" + (hr === 1 ? "" : "s") + " ago";
+      var day = Math.floor(hr / 24);
+      if (day < 30) return day + " day" + (day === 1 ? "" : "s") + " ago";
+      var mo = Math.floor(day / 30);
+      return mo + " month" + (mo === 1 ? "" : "s") + " ago";
+    }
+    function loadRecentScans() {
+      if (!recentWrap || !recentItems) return; // stale-HTML safety, same as onIfPresent elsewhere
+      fetch(API_BASE + "/api/recent-scans")
+        .then(function (res) { return res.json(); })
+        .then(function (data) {
+          var scans = (data && data.scans) || [];
+          if (!scans.length) return;
+          recentItems.innerHTML = scans.map(function (s) {
+            var techs = (s.technologies || []).slice(0, 3).join(", ");
+            return '<div class="item"><div class="left"><span class="dom">' + escapeHtml(s.domain) + "</span>" +
+              (techs ? '<span class="tech">' + escapeHtml(techs) + "</span>" : "") + "</div>" +
+              '<span class="time">' + escapeHtml(formatRelativeTime(s.scannedAt)) + "</span></div>";
+          }).join("");
+          recentWrap.style.display = "";
+        })
+        .catch(function () { /* nice-to-have — fails silently, strip just stays hidden */ });
+    }
+    loadRecentScans();
   })();

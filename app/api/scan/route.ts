@@ -6,6 +6,7 @@ import { extractPageInfo } from "@/lib/extract-meta";
 import { checkLlmsTxt } from "@/lib/llms-txt";
 import { detectBotBlock } from "@/lib/waf-detect";
 import { checkScanAccess } from "@/lib/gate";
+import { recordRecentScanBestEffort } from "@/lib/recent-scans";
 
 // This route resolves DNS and streams a raw fetch response, which needs the
 // full Node.js runtime (not the Edge runtime).
@@ -47,7 +48,7 @@ export async function POST(req: NextRequest) {
     return json({ error: "Too many scans from this IP. Try again in a minute." }, 429);
   }
 
-  const access = checkScanAccess(req, ip);
+  const access = await checkScanAccess(req, ip);
   if (!access.allowed) {
     return json(
       { error: "gate", message: "You've used your free scan. Enter your email to keep scanning." },
@@ -94,13 +95,27 @@ export async function POST(req: NextRequest) {
     // instead of silently showing the block page's title/H1 as if it were
     // the site's real content.
     const botBlock = detectBotBlock(result.html, result.headers, result.cookies, technologies.length);
+    const scannedAt = new Date().toISOString();
+
+    // Best-effort: never let a KV hiccup slow down or fail the actual scan.
+    try {
+      const domain = new URL(result.finalUrl).hostname.replace(/^www\./, "");
+      recordRecentScanBestEffort({
+        domain,
+        technologies: technologies.slice(0, 3).map((t) => t.name),
+        scannedAt,
+      });
+    } catch {
+      // Malformed finalUrl (shouldn't happen post-fetch, but don't let it
+      // take the response down if it does).
+    }
 
     return json(
       {
         requestedUrl: rawUrl,
         finalUrl: result.finalUrl,
         statusCode: result.statusCode,
-        scannedAt: new Date().toISOString(),
+        scannedAt,
         technologies,
         page,
         llmsTxt,
