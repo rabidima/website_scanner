@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { checkSeoRank, SerperError } from "@/lib/serper";
 import { resolveCorsOrigin, corsHeaders } from "@/lib/cors";
-import { checkScanAccess, freeScanUsedCookie } from "@/lib/gate";
+import { checkScanAccess } from "@/lib/gate";
 
 export const runtime = "nodejs";
 
@@ -37,7 +37,7 @@ export async function POST(req: NextRequest) {
     return json({ error: "Too many rank checks from this IP. Try again in a minute." }, 429);
   }
 
-  const access = checkScanAccess(req);
+  const access = checkScanAccess(req, ip);
   if (!access.allowed) {
     return json(
       { error: "gate", message: "You've used your free scan. Enter your email to keep scanning." },
@@ -65,11 +65,7 @@ export async function POST(req: NextRequest) {
 
   try {
     const result = await checkSeoRank(keyword, domain, apiKey);
-    return json(
-      result,
-      200,
-      access.grantFreeScanCookie ? { "Set-Cookie": freeScanUsedCookie() } : undefined
-    );
+    return json(result, 200);
   } catch (err) {
     if (isSerperError(err)) {
       return json({ error: err.message }, 502);

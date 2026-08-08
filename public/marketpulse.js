@@ -8,6 +8,24 @@
       try { return new URL(el.src).origin; } catch (e) { return ""; }
     })();
 
+    // Verified-unlocked status is NOT a cookie. This API lives on a
+    // different origin than this page, which makes cookies third-party —
+    // browsers (Chrome Incognito today, everywhere soon) silently drop
+    // those. Instead the token /api/lead returns is kept in localStorage
+    // (first-party, always reliable) and sent back explicitly as
+    // `Authorization: Bearer <token>` on every scan request.
+    var TOKEN_KEY = "mp_verified_token";
+    function getToken() {
+      try { return localStorage.getItem(TOKEN_KEY) || ""; } catch (e) { return ""; }
+    }
+    function setToken(token) {
+      try { localStorage.setItem(TOKEN_KEY, token); } catch (e) { /* private-mode storage denial etc — non-fatal, just won't persist */ }
+    }
+    function authHeaders() {
+      var token = getToken();
+      return token ? { Authorization: "Bearer " + token } : {};
+    }
+
     // ---- scan catalog: 4 real, 5 coming-soon, in the visual order they render ----
     // Real entries carry an `id` used to route to the right fetch + grading logic.
     var CATALOG = [
@@ -145,13 +163,13 @@
     function submitLead(email, onSuccess, onError) {
       fetch(API_BASE + "/api/lead", {
         method: "POST",
-        credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email: email })
       })
         .then(function (res) { return res.json().then(function (data) { return { ok: res.ok, data: data }; }); })
         .then(function (r) {
           if (!r.ok) { onError(r.data.message || r.data.error || "Couldn't verify that email."); return; }
+          if (r.data.token) setToken(r.data.token);
           onSuccess();
         })
         .catch(function () { onError("Network error — try again in a moment."); });
@@ -319,8 +337,7 @@
       function call(path, body, id) {
         return fetch(API_BASE + path, {
           method: "POST",
-          credentials: "include",
-          headers: { "Content-Type": "application/json" },
+          headers: Object.assign({ "Content-Type": "application/json" }, authHeaders()),
           body: JSON.stringify(body)
         })
           .then(function (res) { return res.json().then(function (data) { return { status: res.status, ok: res.ok, data: data }; }); })

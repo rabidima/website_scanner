@@ -1,13 +1,18 @@
 /**
- * Offline test for lib/gate.ts — cookie signing/verification and the
+ * Offline test for lib/gate.ts — token signing/verification and the
  * free-scan/verified access decision. No network calls involved.
+ *
+ * V2: gate state is no longer cookie-based (see lib/gate.ts's header
+ * comment for why — cross-site cookies between the Vercel API domain and
+ * the Shopify storefront domain get silently dropped by browsers). Access
+ * is now decided from an explicit `Authorization: Bearer <token>` header
+ * plus a server-side per-IP "used their free scan" set.
+ *
  * Run with: npx tsx scripts/test-gate.mts
  */
 process.env.GATE_SECRET = "test-secret-do-not-use-in-prod";
 
-const { signVerifiedToken, verifyToken, checkScanAccess, freeScanUsedCookie, verifiedCookie } = await import(
-  "../lib/gate"
-);
+const { signVerifiedToken, verifyToken, checkScanAccess, extractBearerToken } = await import("../lib/gate");
 
 let failures = 0;
 function check(label: string, cond: boolean, detail?: string) {
@@ -15,10 +20,10 @@ function check(label: string, cond: boolean, detail?: string) {
   if (!cond) failures++;
 }
 
-function fakeRequest(cookies: Record<string, string>): any {
+function fakeRequest(authHeader?: string): any {
   return {
-    cookies: {
-      get: (name: string) => (name in cookies ? { name, value: cookies[name] } : undefined),
+    headers: {
+      get: (name: string) => (name.toLowerCase() === "authorization" ? authHeader ?? null : null),
     },
   };
 }
@@ -51,35 +56,46 @@ async function run() {
   const expiredToken = `${expiredPayload}.${expiredSig}`;
   check("Rejects an expired token", verifyToken(expiredToken) === null);
 
-  // Case 5: someone can't just hand-set ms_verified=email@x.com — an
-  // unsigned raw string is not a valid two-part token and gets rejected.
-  check("Rejects a plain unsigned email as a fake cookie", verifyToken("attacker@evil.com") === null);
+  // Case 5: someone can't just hand-set an Authorization header to their
+  // email — an unsigned raw string is not a valid two-part token.
+  check("Rejects a plain unsigned email as a fake token", verifyToken("attacker@evil.com") === null);
 
-  // Case 6: checkScanAccess — no cookies at all -> free scan allowed.
-  const freshAccess = checkScanAccess(fakeRequest({}));
-  check("No cookies -> free scan allowed", freshAccess.allowed === true && freshAccess.reason === "free-scan");
+  // Case 6: extractBearerToken pulls the token out of "Bearer <token>", is
+  // case-insensitive on the scheme, and returns null when absent/malformed.
+  check("Extracts token from 'Bearer <token>'", extractBearerToken(fakeRequest(`Bearer ${token}`)) === token);
+  check("Extracts token from lowercase 'bearer <token>'", extractBearerToken(fakeRequest(`bearer ${token}`)) === token);
+  check("No Authorization header -> null", extractBearerToken(fakeRequest()) === null);
+  check("Malformed Authorization header -> null", extractBearerToken(fakeRequest("Basic abc123")) === null);
 
-  // Case 7: free-scan-used cookie present, no verified cookie -> denied.
-  const usedAccess = checkScanAccess(fakeRequest({ ms_free_used: "1" }));
-  check("Free scan spent, no email -> gated", usedAccess.allowed === false && usedAccess.reason === "gate");
+  // Case 7: checkScanAccess — fresh IP, no token -> free scan allowed, and
+  // that IP is now recorded as having used its free scan.
+  const freshIp = "203.0.113.10";
+  const freshAccess = checkScanAccess(fakeRequest(), freshIp);
+  check("Fresh IP, no token -> free scan allowed", freshAccess.allowed === true && freshAccess.reason === "free-scan");
 
-  // Case 8: verified cookie present -> allowed regardless of free-scan cookie.
+  // Case 8: same IP again, still no token -> gated (free scan already spent).
+  const usedAccess = checkScanAccess(fakeRequest(), freshIp);
+  check("Same IP again, no token -> gated", usedAccess.allowed === false && usedAccess.reason === "gate");
+
+  // Case 9: a different fresh IP still gets its own free scan (per-IP, not global).
+  const otherIp = "203.0.113.20";
+  const otherAccess = checkScanAccess(fakeRequest(), otherIp);
+  check("Different fresh IP -> free scan allowed independently", otherAccess.allowed === true && otherAccess.reason === "free-scan");
+
+  // Case 10: valid bearer token -> unlimited access regardless of whether
+  // this IP already spent its free scan.
   const verifiedToken = signVerifiedToken("dimas@example.com");
-  const verifiedAccess = checkScanAccess(fakeRequest({ ms_free_used: "1", ms_verified: verifiedToken }));
+  const verifiedAccess = checkScanAccess(fakeRequest(`Bearer ${verifiedToken}`), freshIp);
   check(
-    "Valid verified cookie -> unlimited access",
+    "Valid bearer token -> unlimited access even on an IP that already used its free scan",
     verifiedAccess.allowed === true && verifiedAccess.reason === "verified" && (verifiedAccess as any).email === "dimas@example.com"
   );
 
-  // Case 9: a garbage verified cookie value falls back to the free-scan check
-  // rather than crashing the request.
-  const garbageVerified = checkScanAccess(fakeRequest({ ms_verified: "garbage" }));
-  check("Garbage verified cookie falls back to free-scan check, doesn't throw", garbageVerified.allowed === true);
-
-  // Case 10: Set-Cookie strings carry the SameSite=None; Secure attributes
-  // required for cross-site (Shopify storefront -> Vercel API) cookies.
-  check("freeScanUsedCookie sets SameSite=None; Secure", /SameSite=None/.test(freeScanUsedCookie()) && /Secure/.test(freeScanUsedCookie()));
-  check("verifiedCookie sets SameSite=None; Secure", /SameSite=None/.test(verifiedCookie("a@b.com")) && /Secure/.test(verifiedCookie("a@b.com")));
+  // Case 11: a garbage bearer token falls back to the per-IP free-scan
+  // check rather than crashing the request.
+  const garbageIp = "203.0.113.30";
+  const garbageVerified = checkScanAccess(fakeRequest("Bearer garbage"), garbageIp);
+  check("Garbage bearer token falls back to free-scan check, doesn't throw", garbageVerified.allowed === true && garbageVerified.reason === "free-scan");
 
   console.log(`\n${failures === 0 ? "All gate cases passed." : `${failures} case(s) failed.`}`);
   process.exit(failures === 0 ? 0 : 1);

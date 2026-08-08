@@ -232,7 +232,6 @@
 
         fetch(API_BASE + "/api/pagespeed", {
           method: "POST",
-          credentials: "include",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ url: lastScannedUrl })
         })
@@ -374,7 +373,6 @@
 
         fetch(API_BASE + "/api/ai-visibility", {
           method: "POST",
-          credentials: "include",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ domain: lastScannedUrl, prompts: prompts })
         })
@@ -588,7 +586,6 @@
 
         fetch(API_BASE + "/api/seo-rank", {
           method: "POST",
-          credentials: "include",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ domain: lastScannedUrl, keyword: keyword })
         })
@@ -760,7 +757,6 @@
 
         fetch(API_BASE + "/api/scan", {
           method: "POST",
-          credentials: "include",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ url: url })
         })

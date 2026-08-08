@@ -8,15 +8,12 @@
  * it does nothing to stop direct server-to-server calls, which is expected.
  *
  * Configure via the ALLOWED_ORIGINS env var: a comma-separated list of exact
- * origins, e.g. "https://mystore.com,https://mystore.myshopify.com".
- *
- * IMPORTANT — the free-scan/email gate (lib/gate.ts) relies on cookies sent
- * cross-site from the Shopify storefront to this app's domain. Browsers
- * refuse to send or expose cookies on credentialed requests when the
- * response uses "Access-Control-Allow-Origin: *" — the wildcard is
- * incompatible with credentials. Once the gate is live, ALLOWED_ORIGINS
- * MUST be an explicit origin list, not "*", or the gate will silently stop
- * working (every request will look like a fresh, ungated visitor).
+ * origins, e.g. "https://mystore.com,https://mystore.myshopify.com". Set it
+ * to "*" to allow any origin — safe to do here since these routes no longer
+ * use cookies (see lib/gate.ts: the free-scan/email gate moved to IP-based
+ * tracking + an explicit Authorization header instead of Set-Cookie, since
+ * cross-site cookies between this app's domain and the storefront domain get
+ * silently blocked by browsers' third-party cookie policies).
  */
 
 const DEV_ORIGINS = ["http://localhost:3000"];
@@ -46,8 +43,7 @@ export function corsHeaders(allowedOrigin: string | null): Record<string, string
   return {
     "Access-Control-Allow-Origin": allowedOrigin,
     "Access-Control-Allow-Methods": "POST, OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type",
-    "Access-Control-Allow-Credentials": "true",
+    "Access-Control-Allow-Headers": "Content-Type, Authorization",
     "Access-Control-Max-Age": "86400",
     Vary: "Origin",
   };

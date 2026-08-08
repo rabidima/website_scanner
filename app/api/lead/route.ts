@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { resolveCorsOrigin, corsHeaders } from "@/lib/cors";
 import { validateEmail } from "@/lib/email-validate";
-import { verifiedCookie } from "@/lib/gate";
+import { signVerifiedToken } from "@/lib/gate";
 import { recordLeadBestEffort } from "@/lib/shopify";
 
 export const runtime = "nodejs";
@@ -59,13 +59,16 @@ export async function POST(req: NextRequest) {
   // this is marketing lead capture, not the gate itself.
   recordLeadBestEffort(email);
 
-  let cookie: string;
+  let token: string;
   try {
-    cookie = verifiedCookie(email);
+    token = signVerifiedToken(email);
   } catch (err) {
-    console.error("Failed to sign verified cookie:", err);
+    console.error("Failed to sign verified token:", err);
     return json({ error: "This deployment isn't fully configured yet. Try again shortly." }, 500);
   }
 
-  return json({ ok: true }, 200, { "Set-Cookie": cookie });
+  // The client stores this in localStorage and sends it back as
+  // `Authorization: Bearer <token>` on every scan request — see lib/gate.ts
+  // for why this isn't a cookie.
+  return json({ ok: true, token }, 200);
 }
