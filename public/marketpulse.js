@@ -53,13 +53,25 @@
     // resolves. The real card on the results page always reflects the true
     // per-provider data regardless of this overlay's timing.
     //
-    // Icons here are generic geometric glyphs, not the providers' actual
-    // trademarked logos — swap in licensed brand SVGs if you have them.
+    // Claude/Gemini/Perplexity below use each brand's real logo mark (path
+    // data + official hex from simple-icons, CC0-licensed and maintained
+    // specifically for reproducing brand icons like this — see
+    // simpleicons.org). `filled: true` tells iconSvg() to render these as
+    // solid shapes instead of the open-stroke style used by this file's
+    // other, generic glyphs.
+    //
+    // ChatGPT/OpenAI is the one exception: OpenAI's mark isn't in simple-
+    // icons — it was pulled from that project at the brand's own request
+    // (see their DISCLAIMER.md's "Removal of Brands" process), which is a
+    // strong signal against hand-reproducing it from memory instead. Until
+    // you supply OpenAI's actual current SVG (download it yourself from
+    // openai.com/brand, which publishes official assets with usage terms,
+    // and drop it in here), ChatGPT keeps the placeholder sparkle glyph.
     var AI_PROVIDERS = [
       { id: "chatgpt", name: "ChatGPT", desc: "Does it recommend you and what it says", color: "#10A37F", icon: "M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8Z" },
-      { id: "claude", name: "Claude", desc: "Mentions, sentiment and sources", color: "#D97757", icon: "M12 2v4M12 18v4M4.9 4.9l2.8 2.8M16.3 16.3l2.8 2.8M2 12h4M18 12h4M4.9 19.1l2.8-2.8M16.3 7.7l2.8-2.8" },
-      { id: "gemini", name: "Gemini", desc: "Live AI answers", color: "#4B7BEC", icon: "M12 2 22 12 12 22 2 12Z" },
-      { id: "perplexity", name: "Perplexity", desc: "Citations and sources", color: "#7C6CF0", icon: "M12 2a10 10 0 1 0 .001 0Z|M12 7v5l3 3" }
+      { id: "claude", name: "Claude", desc: "Mentions, sentiment and sources", color: "#191919", filled: true, icon: "M17.3041 3.541h-3.6718l6.696 16.918H24Zm-10.6082 0L0 20.459h3.7442l1.3693-3.5527h7.0052l1.3693 3.5528h3.7442L10.5363 3.5409Zm-.3712 10.2232 2.2914-5.9456 2.2914 5.9456Z" },
+      { id: "gemini", name: "Gemini", desc: "Live AI answers", color: "#8E75B2", filled: true, icon: "M11.04 19.32Q12 21.51 12 24q0-2.49.93-4.68.96-2.19 2.58-3.81t3.81-2.55Q21.51 12 24 12q-2.49 0-4.68-.93a12.3 12.3 0 0 1-3.81-2.58 12.3 12.3 0 0 1-2.58-3.81Q12 2.49 12 0q0 2.49-.96 4.68-.93 2.19-2.55 3.81a12.3 12.3 0 0 1-3.81 2.58Q2.49 12 0 12q2.49 0 4.68.96 2.19.93 3.81 2.55t2.55 3.81" },
+      { id: "perplexity", name: "Perplexity", desc: "Citations and sources", color: "#1FB8CD", filled: true, icon: "M22.3977 7.0896h-2.3106V.0676l-7.5094 6.3542V.1577h-1.1554v6.1966L4.4904 0v7.0896H1.6023v10.3976h2.8882V24l6.932-6.3591v6.2005h1.1554v-6.0469l6.9318 6.1807v-6.4879h2.8882V7.0896zm-3.4657-4.531v4.531h-5.355l5.355-4.531zm-13.2862.0676 4.8691 4.4634H5.6458V2.6262zM2.7576 16.332V8.245h7.8476l-6.1149 6.1147v1.9723H2.7576zm2.8882 5.0404v-3.8852h.0001v-2.6488l5.7763-5.7764v7.0111l-5.7764 5.2993zm12.7086.0248-5.7766-5.1509V9.0618l5.7766 5.7766v6.5588zm2.8882-5.0652h-1.733v-1.9723L13.3948 8.245h7.8478v8.087z" }
     ];
     var BONUS_CHECKS = [
       { id: "seo", name: "Google ranking", desc: "Where you rank and top keywords", icon: "M3 3v18h18|M8 17V9M12 17V5M16 17v-6" },
@@ -82,8 +94,13 @@
       perplexity: ["Perplexity check…", "citation share…"]
     };
 
-    function iconSvg(icon, w, h) {
-      return '<svg width="' + w + '" height="' + h + '" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">' +
+    // filled=true renders a solid currentColor shape (used for real brand
+    // marks, which are filled logo artwork, not line icons) instead of the
+    // default open-stroke style used by the rest of this file's generic
+    // Lucide-style glyphs.
+    function iconSvg(icon, w, h, filled) {
+      var attrs = filled ? 'fill="currentColor"' : 'fill="none" stroke="currentColor" stroke-width="2"';
+      return '<svg width="' + w + '" height="' + h + '" viewBox="0 0 24 24" ' + attrs + '>' +
         icon.split("|").map(function (d) { return '<path d="' + d + '"/>'; }).join("") + "</svg>";
     }
 
@@ -132,7 +149,7 @@
     // container they render into, and how their state gets driven, differs.
     function stepRow(s) {
       return '<div class="mp-step2" data-id="' + s.id + '">' +
-        '<div class="ic" style="background:' + s.color_bg + ';color:' + s.color + '">' + iconSvg(s.icon, 17, 17) + '</div>' +
+        '<div class="ic" style="background:' + s.color_bg + ';color:' + s.color + '">' + iconSvg(s.icon, 17, 17, s.filled) + '</div>' +
         '<div class="meta"><div class="t">' + s.name + '</div><div class="d">' + s.desc + '</div></div>' +
         '<div class="status">' +
           '<span class="mp-mini-radar"><span class="r"></span><span class="s"></span><span class="c"></span></span>' +
@@ -141,7 +158,7 @@
     }
 
     aiStepsEl.innerHTML = AI_PROVIDERS.map(function (s) {
-      return stepRow({ id: s.id, name: s.name, desc: s.desc, icon: s.icon, color: s.color, color_bg: s.color + "22" });
+      return stepRow({ id: s.id, name: s.name, desc: s.desc, icon: s.icon, color: s.color, color_bg: s.color + "22", filled: s.filled });
     }).join("");
     var aiStepEls = {};
     Array.prototype.forEach.call(aiStepsEl.querySelectorAll(".mp-step2"), function (el) {
@@ -415,12 +432,12 @@
     // Both sections (AI providers, bonus checks) share the same collapsible
     // row shell — icon, title+description, a status badge, a chevron — and
     // only the badge logic and expanded-body content differ per section.
-    function accRow(id, icon, iconBg, iconColor, name, desc, badgeCls, badgeLabel, bodyHtml) {
+    function accRow(id, icon, iconBg, iconColor, name, desc, badgeCls, badgeLabel, bodyHtml, filled) {
       var row = document.createElement("div");
       row.className = "mp-acc-row";
       row.innerHTML =
         '<button class="mp-acc-summary" type="button" aria-expanded="false">' +
-          '<span class="ic" style="background:' + iconBg + ';color:' + iconColor + '">' + iconSvg(icon, 18, 18) + '</span>' +
+          '<span class="ic" style="background:' + iconBg + ';color:' + iconColor + '">' + iconSvg(icon, 18, 18, filled) + '</span>' +
           '<span class="meta"><span class="t">' + name + '</span><span class="d">' + desc + '</span></span>' +
           '<span class="mp-badge ' + badgeCls + '">' + badgeLabel + '</span>' +
           '<span class="mp-acc-chev">' + iconSvg("m6 9 6 6 6-6", 16, 16) + '</span>' +
@@ -686,7 +703,7 @@
       AI_PROVIDERS.forEach(function (p, i) {
         var pr = findProviderResult(aiData, PROVIDER_ID_MAP[p.id]);
         var badge = aiSentimentBadge(pr);
-        var row = accRow(p.id, p.icon, p.color + "22", p.color, p.name, p.desc, badge.cls, badge.label, aiRowBody(pr, aiCallFailedMsg));
+        var row = accRow(p.id, p.icon, p.color + "22", p.color, p.name, p.desc, badge.cls, badge.label, aiRowBody(pr, aiCallFailedMsg), p.filled);
         row.style.animationDelay = (i * 55) + "ms";
         aiAccordion.appendChild(row);
       });
