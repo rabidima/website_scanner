@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { runPageSpeedBoth } from "@/lib/pagespeed";
+import { runPageSpeed, runPageSpeedBoth } from "@/lib/pagespeed";
 import { resolveCorsOrigin, corsHeaders } from "@/lib/cors";
 import { checkScanAccess } from "@/lib/gate";
 
@@ -49,7 +49,7 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  let body: { url?: string };
+  let body: { url?: string; strategy?: string };
   try {
     body = await req.json();
   } catch {
@@ -69,7 +69,24 @@ export async function POST(req: NextRequest) {
 
   // No SSRF concern here the way /api/scan has one — PSI's servers fetch the
   // target, not ours — so no DNS/private-IP check is needed for this route.
-  const { mobile, desktop } = await runPageSpeedBoth(normalizedUrl, process.env.GOOGLE_PAGESPEED_API_KEY);
+  //
+  // "strategy" is opt-in and defaults to running both mobile + desktop, which
+  // is what app/page.tsx and public/embed.js both consume and render side by
+  // side. marketpulse.js is the one caller that only ever displays a single
+  // Core Web Vitals result, so it can pass strategy: "mobile" to skip the
+  // desktop audit entirely. runPageSpeedBoth fires both requests concurrently,
+  // so "both" isn't a strict 2x cost in theory — but Google's PSI API applies
+  // per-key quota/concurrency limits, so two simultaneous Lighthouse runs from
+  // one key commonly queue against each other in practice. Cutting to a single
+  // strategy removes that contention and one full Lighthouse run's worth of
+  // work, which is the real source of the speedup here.
+  const strategy = body.strategy === "mobile" ? "mobile" : "both";
 
+  if (strategy === "mobile") {
+    const mobile = await runPageSpeed(normalizedUrl, "mobile", process.env.GOOGLE_PAGESPEED_API_KEY);
+    return json({ url: normalizedUrl, mobile, desktop: null }, 200);
+  }
+
+  const { mobile, desktop } = await runPageSpeedBoth(normalizedUrl, process.env.GOOGLE_PAGESPEED_API_KEY);
   return json({ url: normalizedUrl, mobile, desktop }, 200);
 }

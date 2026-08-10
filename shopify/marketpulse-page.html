@@ -195,6 +195,28 @@
     .mp-overall .verdict{max-width:380px}
     .mp-overall .verdict h3{font-family:'Poppins';font-size:20px;color:var(--navy-800);margin-bottom:5px}
     .mp-overall .verdict p{color:var(--slate);font-size:14px;line-height:1.55}
+    .mp-score-ring .lbl{font-size:10px;letter-spacing:1px;text-transform:uppercase;color:var(--muted);font-weight:800;margin-top:2px}
+    .mp-stat-row{display:flex;gap:14px;justify-content:center;flex-wrap:wrap;margin:0 0 34px}
+    .mp-stat{background:#fff;border:1px solid var(--line);border-radius:16px;padding:16px 24px;text-align:center;min-width:150px;box-shadow:0 4px 14px rgba(12,34,71,.05)}
+    .mp-stat .v{font-family:'Poppins';font-weight:800;font-size:22px;color:var(--navy-800)}
+    .mp-stat .l{font-size:11.5px;color:var(--slate);margin-top:3px}
+    .mp-acc-group{margin-bottom:26px}
+    .mp-acc-group-hd{font-size:12px;letter-spacing:1.1px;text-transform:uppercase;color:var(--muted);font-weight:800;margin-bottom:12px}
+    .mp-acc{display:flex;flex-direction:column;gap:10px}
+    .mp-acc-row{background:#fff;border:1px solid var(--line);border-radius:16px;overflow:hidden;box-shadow:0 4px 14px rgba(12,34,71,.04);animation:mp-rise .5s ease both}
+    .mp-acc-summary{width:100%;display:flex;align-items:center;gap:14px;padding:16px 18px;border:0;background:none;cursor:pointer;text-align:left;font-family:inherit}
+    .mp-acc-summary .ic{width:38px;height:38px;border-radius:11px;flex:none;display:flex;align-items:center;justify-content:center}
+    .mp-acc-summary .meta{flex:1;min-width:0}
+    .mp-acc-summary .meta .t{font-size:14.5px;font-weight:700;color:var(--navy-800)}
+    .mp-acc-summary .meta .d{font-size:12.5px;color:var(--slate);margin-top:1px}
+    .mp-badge{font-family:'Poppins';font-weight:800;font-size:11.5px;padding:4px 12px;border-radius:999px;white-space:nowrap;flex:none}
+    .mp-acc-chev{flex:none;color:var(--muted);transition:transform .2s ease;display:flex}
+    .mp-acc-row.open .mp-acc-chev{transform:rotate(180deg)}
+    .mp-acc-body{display:none;padding:0 18px 18px 70px;font-size:13px;color:var(--slate);line-height:1.55}
+    .mp-acc-row.open .mp-acc-body{display:block}
+    .mp-acc-body p{margin-bottom:6px}
+    .mp-acc-body .src a{color:var(--navy-500);word-break:break-all}
+    .mp-teaser{text-align:center;font-size:13px;color:var(--muted);margin:6px 0 30px;padding:14px;background:var(--bg-soft);border-radius:14px}
     .mp-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
     .mp-card{background:#fff;border:1px solid var(--line);border-radius:var(--radius);padding:20px;position:relative;overflow:hidden;box-shadow:0 6px 20px rgba(12,34,71,.05);animation:mp-rise .5s ease both}
     .mp-card.locked{background:var(--bg-soft)}
@@ -246,7 +268,7 @@
     .mp-footer .f-brand{display:flex;align-items:center;gap:8px}
     .mp-footer .f-brand img{width:20px;height:20px;border-radius:5px}
     @media(max-width:860px){.mp-grid{grid-template-columns:1fr 1fr}.mp-btn-scan span.txt{display:none}.mp-btn-scan{padding:15px 20px}}
-    @media(max-width:560px){.mp-topbar{padding:14px 18px}.mp-grid{grid-template-columns:1fr}.mp-overall{flex-direction:column}.mp-upsell{flex-direction:column;text-align:center}.mp-trust .logos{gap:20px}}
+    @media(max-width:560px){.mp-topbar{padding:14px 18px}.mp-grid{grid-template-columns:1fr}.mp-overall{flex-direction:column}.mp-upsell{flex-direction:column;text-align:center}.mp-trust .logos{gap:20px}.mp-acc-body{padding-left:18px}.mp-stat{min-width:100px;padding:14px}}
   </style>
 
   <main class="mp-main">
@@ -287,16 +309,33 @@
     <section class="mp-results" id="mpResults">
       <div class="mp-res-head">
         <div class="site" id="mpResSite">scan complete for <b>yourbrand.com</b></div>
-        <h2>Your MarketPulse Report</h2>
+        <h2>How AI sees your business</h2>
       </div>
       <div class="mp-overall">
-        <div class="mp-score-ring" id="mpScoreRing"><div class="inner"><span class="num" id="mpScoreNum">0</span><span class="of">/ 100</span></div></div>
+        <div class="mp-score-ring" id="mpScoreRing"><div class="inner"><span class="num" id="mpScoreNum">0</span><span class="of">/100</span><span class="lbl">AI VISIBILITY</span></div></div>
         <div class="verdict">
           <h3 id="mpVerdictTitle">Compiling your report…</h3>
           <p id="mpVerdictBody"></p>
         </div>
       </div>
-      <div class="mp-grid" id="mpCardGrid"></div>
+
+      <div class="mp-stat-row" id="mpStatRow">
+        <div class="mp-stat"><div class="v" id="mpStatMentioned">–</div><div class="l">Assistants mentioning you</div></div>
+        <div class="mp-stat"><div class="v" id="mpStatSentiment">–</div><div class="l">Overall sentiment</div></div>
+        <div class="mp-stat"><div class="v" id="mpStatSources">–</div><div class="l">Sources cited</div></div>
+      </div>
+
+      <div class="mp-acc-group">
+        <div class="mp-acc-group-hd">How AI sees you</div>
+        <div class="mp-acc" id="mpAiAccordion"></div>
+      </div>
+
+      <div class="mp-acc-group">
+        <div class="mp-acc-group-hd">Bonus checks</div>
+        <div class="mp-acc" id="mpBonusAccordion"></div>
+      </div>
+
+      <div class="mp-teaser">More checks are on the way — traffic &amp; visibility, reputation &amp; reviews, social presence, ads &amp; tracking, and more.</div>
 
       <div class="mp-upsell">
         <div class="u-left">

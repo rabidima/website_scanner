@@ -66,6 +66,12 @@
       { id: "cwv", name: "Core Web Vitals", desc: "Speed and mobile experience", icon: "M22 12h-4l-3 9L9 3l-3 9H2" },
       { id: "techstack", name: "Tech stack", desc: "What powers the site", icon: "M16 18l6-6-6-6M8 6l-6 6 6 6" }
     ];
+    // AI_PROVIDERS (frontend display ids used by the scanning overlay) use
+    // short brand names; lib/ai-visibility.ts's ProviderResult.provider field
+    // uses the actual API/company names ("openai" for ChatGPT, "anthropic"
+    // for Claude). This maps one to the other so the results accordion can
+    // look up each provider's real result by the frontend id.
+    var PROVIDER_ID_MAP = { chatgpt: "openai", claude: "anthropic", gemini: "gemini", perplexity: "perplexity" };
     var STREAM_LINES = {
       techstack: ["fingerprinting…", "CMS / frameworks…", "analytics tags…", "hosting / CDN…"],
       cwv: ["Lighthouse run…", "LCP / CLS / INP…", "render-blocking…", "mobile vs desktop…"],
@@ -93,7 +99,11 @@
     var scanUrlEl = document.getElementById("mpScanUrl");
     var home = document.getElementById("mpHome");
     var results = document.getElementById("mpResults");
-    var grid = document.getElementById("mpCardGrid");
+    var aiAccordion = document.getElementById("mpAiAccordion");
+    var bonusAccordion = document.getElementById("mpBonusAccordion");
+    var statMentioned = document.getElementById("mpStatMentioned");
+    var statSentiment = document.getElementById("mpStatSentiment");
+    var statSources = document.getElementById("mpStatSources");
     var gateModal = document.getElementById("mpGateModal");
     var gateForm = document.getElementById("mpGateForm");
     var gateEmail = document.getElementById("mpGateEmail");
@@ -401,33 +411,73 @@
       };
     }
 
-    function scoreRing(container, score) {
-      var wrap = document.createElement("div"); wrap.className = "bar";
-      var i = document.createElement("i"); i.style.width = score + "%"; i.style.background = tierColor(score);
-      wrap.appendChild(i); container.appendChild(wrap);
+    // ---- results-page accordion (replaces the old always-open card grid) ----
+    // Both sections (AI providers, bonus checks) share the same collapsible
+    // row shell — icon, title+description, a status badge, a chevron — and
+    // only the badge logic and expanded-body content differ per section.
+    function accRow(id, icon, iconBg, iconColor, name, desc, badgeCls, badgeLabel, bodyHtml) {
+      var row = document.createElement("div");
+      row.className = "mp-acc-row";
+      row.innerHTML =
+        '<button class="mp-acc-summary" type="button" aria-expanded="false">' +
+          '<span class="ic" style="background:' + iconBg + ';color:' + iconColor + '">' + iconSvg(icon, 18, 18) + '</span>' +
+          '<span class="meta"><span class="t">' + name + '</span><span class="d">' + desc + '</span></span>' +
+          '<span class="mp-badge ' + badgeCls + '">' + badgeLabel + '</span>' +
+          '<span class="mp-acc-chev">' + iconSvg("m6 9 6 6 6-6", 16, 16) + '</span>' +
+        '</button>' +
+        '<div class="mp-acc-body">' + bodyHtml + '</div>';
+      return row;
     }
+    // Toggle is delegated once on the results section rather than wired per
+    // row — rows get rebuilt from scratch on every scan, a single listener
+    // here avoids re-binding (and the memory-leak risk of forgetting to).
+    results.addEventListener("click", function (e) {
+      var btn = e.target.closest && e.target.closest(".mp-acc-summary");
+      if (!btn) return;
+      var row = btn.closest(".mp-acc-row");
+      var open = row.classList.toggle("open");
+      btn.setAttribute("aria-expanded", open ? "true" : "false");
+    });
 
-    function realCard(catalogEntry, graded) {
-      var card = document.createElement("div"); card.className = "mp-card";
-      var color = tierColor(graded.score);
-      card.innerHTML =
-        '<div class="accent" style="background:' + color + '"></div>' +
-        '<div class="top"><div class="icon">' + iconSvg(catalogEntry.icon, 20, 20) + '</div>' +
-        '<span class="grade ' + tierClass(graded.score) + '">' + letterGrade(graded.score) + "</span></div>" +
-        "<h4>" + catalogEntry.name + "</h4>" +
-        "<p><b>" + graded.head + ".</b> " + graded.body + "</p>";
-      scoreRing(card, graded.score);
-      return card;
+    // Finds one provider's result inside the /api/ai-visibility response.
+    // marketpulse.js only ever sends a single prompt, so promptResults has
+    // exactly one entry — but this doesn't assume that in case the prompt
+    // count changes later.
+    function findProviderResult(aiData, backendProvider) {
+      var results = ((aiData && aiData.promptResults) || []).reduce(function (acc, pr) {
+        return acc.concat(pr.results || []);
+      }, []);
+      return results.filter(function (r) { return r.provider === backendProvider; })[0] || null;
     }
-    function comingSoonCard(catalogEntry) {
-      var card = document.createElement("div"); card.className = "mp-card locked";
-      card.innerHTML =
-        '<div class="accent" style="background:#c7d0e0"></div>' +
-        '<div class="top"><div class="icon">' + iconSvg(catalogEntry.icon, 20, 20) + '</div>' +
-        '<span class="grade mp-g-soon">Soon</span></div>' +
-        "<h4>" + catalogEntry.name + "</h4>" +
-        "<p>This check is on our roadmap — not part of your report yet.</p>";
-      return card;
+    // Three-state badge, matching the mockup: Positive (mentioned + positive
+    // sentiment), Neutral (mentioned but neutral/negative sentiment), Missed
+    // (not mentioned, not configured, or errored — all "no visibility here").
+    function aiSentimentBadge(pr) {
+      if (!pr || !pr.configured || pr.error || !pr.mentioned) return { cls: "mp-g-bad", label: "Missed" };
+      if (pr.sentiment === "positive") return { cls: "mp-g-good", label: "Positive" };
+      return { cls: "mp-g-mid", label: "Neutral" };
+    }
+    // callFailedMsg is only set when the whole /api/ai-visibility request
+    // failed (network error, gate, 500, etc.) — distinct from a single
+    // provider just not being mentioned or not being configured, so each row
+    // can say what actually happened instead of a misleading "not configured".
+    function aiRowBody(pr, callFailedMsg) {
+      if (callFailedMsg) return "<p>" + escapeHtml(callFailedMsg) + "</p>";
+      if (!pr || !pr.configured) return "<p>This provider isn't configured on the backend yet.</p>";
+      if (pr.error) return "<p>" + escapeHtml(pr.error) + "</p>";
+      if (!pr.mentioned) return "<p>Didn't mention this business for the prompt we asked.</p>";
+      var body = "<p>" + escapeHtml(pr.fullResponse || pr.snippet || "") + "</p>";
+      if (pr.citedUrl) body += '<p class="src">Source: <a href="' + escapeHtml(pr.citedUrl) + '" target="_blank" rel="noopener noreferrer">' + escapeHtml(pr.citedUrl) + "</a></p>";
+      return body;
+    }
+    // Bonus checks reuse the same graders (gradeSeo/gradePsi/gradeTechStack)
+    // that used to feed the old card grid — only the presentation changed.
+    // Google ranking and Core Web Vitals get a letter grade off their score;
+    // tech stack isn't really "gradeable" (it's just what we detected), so it
+    // always shows an Info badge instead of forcing a grade onto it.
+    function bonusBadge(id, graded) {
+      if (id === "techstack") return { cls: "mp-g-soon", label: "Info" };
+      return { cls: tierClass(graded.score), label: "Grade " + letterGrade(graded.score) };
     }
 
     function setStep(id, state) {
@@ -527,7 +577,11 @@
 
       Promise.all([
         call("/api/scan", { url: domain }, "techstack"),
-        call("/api/pagespeed", { url: domain }, "cwv"),
+        // Mobile-only: marketpulse.js only ever shows one Core Web Vitals
+        // result, so skip the (unused here) desktop audit — cuts this call's
+        // wall-clock time roughly in half. app/page.tsx and embed.js don't
+        // pass this and keep getting both, since they render both.
+        call("/api/pagespeed", { url: domain, strategy: "mobile" }, "cwv"),
         call("/api/seo-rank", { domain: host, keyword: keyword }, "seo"),
         call("/api/ai-visibility", { domain: host, prompts: [aiPrompt] }, "ai")
       ]).then(function () {
@@ -578,25 +632,30 @@
       upsellError.style.display = "none";
 
       var graders = { techstack: gradeTechStack, cwv: gradePsi, seo: gradeSeo, ai: gradeAi };
-      var scores = [];
-      grid.innerHTML = "";
-      CATALOG.forEach(function (entry, i) {
-        var el;
-        if (entry.real) {
-          var r = results4[entry.id];
-          var graded = r && r.ok ? graders[entry.id](r.data) : { score: 0, head: "Couldn't complete", body: (r && r.data && (r.data.message || r.data.error)) || "This check failed." };
-          scores.push(graded.score);
-          el = realCard(entry, graded);
-        } else {
-          el = comingSoonCard(entry);
-        }
-        el.style.animationDelay = (i * 55) + "ms";
-        grid.appendChild(el);
-      });
+      function gradeOf(id) {
+        var r = results4[id];
+        return r && r.ok ? graders[id](r.data) : { score: 0, head: "Couldn't complete", body: (r && r.data && (r.data.message || r.data.error)) || "This check failed.", failed: true };
+      }
 
-      var overall = scores.length ? Math.round(scores.reduce(function (a, b) { return a + b; }, 0) / scores.length) : 0;
-      var title = overall >= 70 ? "Strong presence — keep the momentum" : overall >= 40 ? "Solid foundation — real opportunities to fix" : "Multiple issues holding this site back";
-      var body = "We ran 4 live checks (tech stack, Core Web Vitals, Google ranking, AI visibility) — 5 more are on the way. Full breakdown below.";
+      // ---- hero: AI-visibility score is the primary number now (not an
+      // average across all 4 checks) — this page's whole point is "how does
+      // AI see this business", so that's what earns the big ring. ----
+      var aiResult = results4.ai;
+      var aiData = aiResult && aiResult.ok ? aiResult.data : null;
+      var aiGraded = gradeOf("ai");
+      var aiScore = aiGraded.score;
+
+      var mentioned = 0, queried = 0;
+      ((aiData && aiData.mentionRates) || []).forEach(function (r) { mentioned += r.mentionedCount || 0; queried += r.queriedCount || 0; });
+
+      var title = !aiData ? "Couldn't complete the AI visibility check"
+        : queried === 0 ? "No AI providers configured yet"
+        : aiScore >= 70 ? "AI knows you and recommends you well."
+        : aiScore >= 40 ? "AI knows you, but you're missing key mentions."
+        : "AI barely knows this business exists yet.";
+      var body = queried > 0
+        ? "We asked " + queried + " AI assistant" + (queried === 1 ? "" : "s") + " a live question about this business — plus 3 bonus technical checks below."
+        : "Set at least one AI provider API key on the backend (see .env.example) to run this check.";
       document.getElementById("mpVerdictTitle").textContent = title;
       document.getElementById("mpVerdictBody").textContent = body;
 
@@ -605,8 +664,43 @@
         v++;
         ring.style.setProperty("--v", v);
         num.textContent = v;
-        if (v >= overall) clearInterval(iv);
+        if (v >= aiScore) clearInterval(iv);
       }, 15);
+
+      // ---- stat mini-cards ----
+      var allProviderResults = AI_PROVIDERS.map(function (p) { return findProviderResult(aiData, PROVIDER_ID_MAP[p.id]); });
+      statMentioned.textContent = queried > 0 ? mentioned + "/" + queried : "—";
+      var mentionedResults = allProviderResults.filter(function (pr) { return pr && pr.mentioned; });
+      var sentimentLabel = mentionedResults.length === 0 ? "No mentions yet"
+        : mentionedResults.some(function (pr) { return pr.sentiment === "positive"; }) ? "Positive"
+        : mentionedResults.some(function (pr) { return pr.sentiment === "neutral"; }) ? "Neutral"
+        : "Negative";
+      statSentiment.textContent = sentimentLabel;
+      statSources.textContent = String(allProviderResults.filter(function (pr) { return pr && pr.citedUrl; }).length);
+
+      // ---- "How AI sees you" accordion — one row per provider ----
+      var aiCallFailedMsg = (!aiResult || !aiResult.ok)
+        ? ((aiResult && aiResult.data && (aiResult.data.message || aiResult.data.error)) || "This check failed.")
+        : null;
+      aiAccordion.innerHTML = "";
+      AI_PROVIDERS.forEach(function (p, i) {
+        var pr = findProviderResult(aiData, PROVIDER_ID_MAP[p.id]);
+        var badge = aiSentimentBadge(pr);
+        var row = accRow(p.id, p.icon, p.color + "22", p.color, p.name, p.desc, badge.cls, badge.label, aiRowBody(pr, aiCallFailedMsg));
+        row.style.animationDelay = (i * 55) + "ms";
+        aiAccordion.appendChild(row);
+      });
+
+      // ---- "Bonus checks" accordion — the 3 non-AI real checks ----
+      bonusAccordion.innerHTML = "";
+      BONUS_CHECKS.forEach(function (c, i) {
+        var graded = gradeOf(c.id);
+        var badge = bonusBadge(c.id, graded);
+        var bodyHtml = "<p><b>" + escapeHtml(graded.head) + ".</b> " + escapeHtml(graded.body) + "</p>";
+        var row = accRow(c.id, c.icon, "rgba(255,140,26,.14)", "#FF8C1A", c.name, c.desc, badge.cls, badge.label, bodyHtml);
+        row.style.animationDelay = ((AI_PROVIDERS.length + i) * 55) + "ms";
+        bonusAccordion.appendChild(row);
+      });
 
       results.classList.add("show");
       window.scrollTo({ top: 0 });
