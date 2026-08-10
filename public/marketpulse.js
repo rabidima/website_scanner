@@ -39,12 +39,41 @@
       { name: "Tech stack detected", icon: "M16 18l6-6-6-6M8 6l-6 6 6 6", real: true, id: "techstack" },
       { name: "Ads & tracking", icon: "M3 4h18v14H3z|M7 20h10", real: false }
     ];
-    var REAL_STEPS = CATALOG.filter(function (c) { return c.real; }); // overlay only tracks these 4
+    var REAL_STEPS = CATALOG.filter(function (c) { return c.real; }); // the 4 actual fetches made per scan
+
+    // ---- scanning-overlay display data ----
+    // The overlay groups the 4 real fetches into two visual sections. "Bonus
+    // checks" maps 1:1 to 3 of the 4 real API calls (seo/cwv/techstack) and
+    // is driven by their actual completion, same as before. "AI visibility"
+    // is a single real API call (/api/ai-visibility, id "ai") that already
+    // returns all 4 providers' results in one response — there's no way to
+    // know when ChatGPT-specifically finished vs. Claude-specifically. So
+    // these 4 rows are decorative: each shows a small radar spin for a fixed
+    // ~2s then flips to "Done", independent of when the real call actually
+    // resolves. The real card on the results page always reflects the true
+    // per-provider data regardless of this overlay's timing.
+    //
+    // Icons here are generic geometric glyphs, not the providers' actual
+    // trademarked logos — swap in licensed brand SVGs if you have them.
+    var AI_PROVIDERS = [
+      { id: "chatgpt", name: "ChatGPT", desc: "Does it recommend you and what it says", color: "#10A37F", icon: "M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8Z" },
+      { id: "claude", name: "Claude", desc: "Mentions, sentiment and sources", color: "#D97757", icon: "M12 2v4M12 18v4M4.9 4.9l2.8 2.8M16.3 16.3l2.8 2.8M2 12h4M18 12h4M4.9 19.1l2.8-2.8M16.3 7.7l2.8-2.8" },
+      { id: "gemini", name: "Gemini", desc: "Live AI answers", color: "#4B7BEC", icon: "M12 2 22 12 12 22 2 12Z" },
+      { id: "perplexity", name: "Perplexity", desc: "Citations and sources", color: "#7C6CF0", icon: "M12 2a10 10 0 1 0 .001 0Z|M12 7v5l3 3" }
+    ];
+    var BONUS_CHECKS = [
+      { id: "seo", name: "Google ranking", desc: "Where you rank and top keywords", icon: "M3 3v18h18|M8 17V9M12 17V5M16 17v-6" },
+      { id: "cwv", name: "Core Web Vitals", desc: "Speed and mobile experience", icon: "M22 12h-4l-3 9L9 3l-3 9H2" },
+      { id: "techstack", name: "Tech stack", desc: "What powers the site", icon: "M16 18l6-6-6-6M8 6l-6 6 6 6" }
+    ];
     var STREAM_LINES = {
       techstack: ["fingerprinting…", "CMS / frameworks…", "analytics tags…", "hosting / CDN…"],
       cwv: ["Lighthouse run…", "LCP / CLS / INP…", "render-blocking…", "mobile vs desktop…"],
       seo: ["SERP crawl…", "keyword positions…", "competitor overlap…", "SERP features…"],
-      ai: ["querying ChatGPT…", "Claude check…", "Gemini check…", "citation share…"]
+      chatgpt: ["querying ChatGPT…"],
+      claude: ["Claude check…"],
+      gemini: ["Gemini check…"],
+      perplexity: ["Perplexity check…", "citation share…"]
     };
 
     function iconSvg(icon, w, h) {
@@ -56,9 +85,10 @@
     var form = document.getElementById("mpScanForm");
     var input = document.getElementById("mpUrlInput");
     var overlay = document.getElementById("mpOverlay");
-    var stepsEl = document.getElementById("mpSteps");
-    var fill = document.getElementById("mpFill");
-    var pct = document.getElementById("mpPct");
+    var aiStepsEl = document.getElementById("mpAiSteps");
+    var bonusStepsEl = document.getElementById("mpBonusSteps");
+    var scanRing = document.getElementById("mpScanRing");
+    var scanRingNum = document.getElementById("mpScanPct");
     var stream = document.getElementById("mpStream");
     var scanUrlEl = document.getElementById("mpScanUrl");
     var home = document.getElementById("mpHome");
@@ -87,15 +117,32 @@
       return '<div class="mp-chip">' + iconSvg(s.icon, 15, 15) + s.name + "</div>";
     }).join("");
 
-    stepsEl.innerHTML = REAL_STEPS.map(function (s) {
-      return '<div class="mp-step" data-id="' + s.id + '">' +
-        '<div class="box"><span class="spin"></span>' +
-        '<span class="tick"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="m5 12 5 5 9-11"/></svg></span>' +
-        '<span class="cross"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M6 6l12 12M18 6L6 18"/></svg></span></div>' +
-        '<div class="lbl">' + s.name + "</div></div>";
+    // Both the AI-provider rows and the bonus-check rows share the same
+    // row markup (icon, title+description, status badge) — only which
+    // container they render into, and how their state gets driven, differs.
+    function stepRow(s) {
+      return '<div class="mp-step2" data-id="' + s.id + '">' +
+        '<div class="ic" style="background:' + s.color_bg + ';color:' + s.color + '">' + iconSvg(s.icon, 17, 17) + '</div>' +
+        '<div class="meta"><div class="t">' + s.name + '</div><div class="d">' + s.desc + '</div></div>' +
+        '<div class="status">' +
+          '<span class="mp-mini-radar"><span class="r"></span><span class="s"></span><span class="c"></span></span>' +
+          '<span class="txt">Done</span><span class="txt-fail">Failed</span><span class="check">✓</span><span class="cross">✕</span>' +
+        '</div></div>';
+    }
+
+    aiStepsEl.innerHTML = AI_PROVIDERS.map(function (s) {
+      return stepRow({ id: s.id, name: s.name, desc: s.desc, icon: s.icon, color: s.color, color_bg: s.color + "22" });
+    }).join("");
+    var aiStepEls = {};
+    Array.prototype.forEach.call(aiStepsEl.querySelectorAll(".mp-step2"), function (el) {
+      aiStepEls[el.getAttribute("data-id")] = el;
+    });
+
+    bonusStepsEl.innerHTML = BONUS_CHECKS.map(function (s) {
+      return stepRow({ id: s.id, name: s.name, desc: s.desc, icon: s.icon, color: "#FF8C1A", color_bg: "rgba(255,140,26,.14)" });
     }).join("");
     var stepEls = {};
-    Array.prototype.forEach.call(stepsEl.querySelectorAll(".mp-step"), function (el) {
+    Array.prototype.forEach.call(bonusStepsEl.querySelectorAll(".mp-step2"), function (el) {
       stepEls[el.getAttribute("data-id")] = el;
     });
 
@@ -141,9 +188,23 @@
 
     var pendingHost = null; // set right before a scan that then hits the gate, so the modal can retry it
     var streamTimer = null;
+    var ringTimer = null; // scan-progress ring's simulated-crawl interval
+    var aiTimers = []; // AI-provider rows' decorative 2s-spin setTimeouts
+
+    // Stops every scan-in-progress timer. Needed on cancel/home-navigation
+    // so a stale timer from an abandoned scan doesn't fire later and flip a
+    // row/ring that's no longer relevant (harmless since the overlay is
+    // hidden by then, but wasteful, and would show stale state if the same
+    // overlay markup is reused for a fresh scan started right after).
+    function clearScanTimers() {
+      clearInterval(streamTimer);
+      clearInterval(ringTimer);
+      aiTimers.forEach(function (t) { clearTimeout(t); });
+      aiTimers = [];
+    }
 
     function goHome() {
-      clearInterval(streamTimer);
+      clearScanTimers();
       overlay.classList.remove("show");
       results.classList.remove("show");
       hideGateModal();
@@ -169,7 +230,7 @@
       input.focus();
     });
     document.getElementById("mpCancelBtn").addEventListener("click", function () {
-      clearInterval(streamTimer);
+      clearScanTimers();
       overlay.classList.remove("show");
       home.style.display = "";
       setState("home");
@@ -294,7 +355,7 @@
       }
       hideUrlError();
       var url = normalizeUrl(val), host = hostOf(url);
-      scanUrlEl.textContent = url;
+      scanUrlEl.textContent = host;
       document.getElementById("mpResSite").innerHTML = "scan complete for <b>" + host + "</b>";
       startScan(host);
     });
@@ -375,31 +436,67 @@
       el.classList.remove("active", "done", "failed");
       el.classList.add(state);
     }
+    // AI-provider rows only ever go "done" — there's no real per-provider
+    // failure state to show since it's one combined API call (see the note
+    // above AI_PROVIDERS for why these are decorative rather than wired to
+    // the real request's lifecycle).
+    function setAiStep(id, state) {
+      var el = aiStepEls[id];
+      if (!el) return;
+      el.classList.remove("done");
+      if (state === "done") el.classList.add("done");
+    }
+
+    // Ring percentage is deliberately NOT an equal split across the 4 real
+    // calls. Core Web Vitals (the PageSpeed/Lighthouse audit) is consistently
+    // the slowest of the four, usually by a wide margin — an equal-weighted
+    // "1 of 4 done = 25%" scheme either sits at 75% for most of the wait (if
+    // CWV finishes last, the common case) or misleadingly hits 100% early (if
+    // it happens to finish first). Instead the ring crawls toward 90% on a
+    // timer calibrated to how long CWV usually takes, then snaps to 100% the
+    // moment the real /api/pagespeed call actually resolves — so it reads
+    // accurately regardless of which call happens to finish last.
+    var CWV_ESTIMATE_MS = 9000;
 
     function startScan(host) {
       pendingHost = host;
       setState("scanning");
       Object.keys(stepEls).forEach(function (id) { setStep(id, "active"); });
-      fill.style.width = "0%";
+      Object.keys(aiStepEls).forEach(function (id) { setAiStep(id, "pending"); });
       overlay.classList.add("show");
 
       var domain = "https://" + host;
       var keyword = deriveKeyword(host);
       var aiPrompt = "is " + keyword + " worth it?";
 
-      var completed = 0;
-      var total = REAL_STEPS.length;
-      function tickProgress() {
-        completed++;
-        var p = Math.round((completed / total) * 100);
-        fill.style.width = p + "%";
-        pct.textContent = p + "% · " + (completed < total ? "analyzing…" : "compiling report…");
+      var ringV = 0;
+      function renderRing(v) {
+        scanRing.style.setProperty("--v", v);
+        scanRingNum.textContent = v;
+      }
+      renderRing(0);
+      ringTimer = setInterval(function () {
+        ringV += (90 - ringV) * 0.06; // eases toward 90, never quite reaching it on its own
+        renderRing(Math.round(ringV));
+      }, CWV_ESTIMATE_MS / 45);
+      function finishRing() {
+        clearInterval(ringTimer);
+        renderRing(100);
       }
 
+      // Each AI provider row spins for ~2s, staggered slightly so they don't
+      // all flip at the exact same instant — purely a visual flourish, not
+      // tied to when the real /api/ai-visibility call actually finishes.
+      AI_PROVIDERS.forEach(function (p, i) {
+        aiTimers.push(setTimeout(function () { setAiStep(p.id, "done"); }, 2000 + i * 350));
+      });
+
       streamTimer = setInterval(function () {
-        var activeIds = Object.keys(stepEls).filter(function (id) { return stepEls[id].classList.contains("active"); });
-        if (activeIds.length === 0) return;
-        var id = activeIds[Math.floor(Math.random() * activeIds.length)];
+        var activeBonusIds = Object.keys(stepEls).filter(function (id) { return stepEls[id].classList.contains("active"); });
+        var pendingAiIds = Object.keys(aiStepEls).filter(function (id) { return !aiStepEls[id].classList.contains("done"); });
+        var pool = activeBonusIds.concat(pendingAiIds);
+        if (pool.length === 0) return;
+        var id = pool[Math.floor(Math.random() * pool.length)];
         var lines = STREAM_LINES[id] || [];
         if (lines.length) stream.textContent = "> " + host + " · " + lines[Math.floor(Math.random() * lines.length)];
       }, 170);
@@ -418,13 +515,13 @@
             if (!r.ok && r.data && r.data.error === "gate") { gated = true; }
             results4[id] = r;
             setStep(id, r.ok ? "done" : "failed");
-            tickProgress();
+            if (id === "cwv") finishRing();
             return r;
           })
           .catch(function () {
             results4[id] = { ok: false, data: { error: "Network error." } };
             setStep(id, "failed");
-            tickProgress();
+            if (id === "cwv") finishRing();
           });
       }
 
@@ -434,7 +531,7 @@
         call("/api/seo-rank", { domain: host, keyword: keyword }, "seo"),
         call("/api/ai-visibility", { domain: host, prompts: [aiPrompt] }, "ai")
       ]).then(function () {
-        clearInterval(streamTimer);
+        clearScanTimers();
         if (gated) {
           stream.textContent = "";
           showGateModal(host);
