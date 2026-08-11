@@ -14,7 +14,8 @@ import type { FreeScanStore } from "../lib/gate";
 
 process.env.GATE_SECRET = "test-secret-do-not-use-in-prod";
 
-const { signVerifiedToken, verifyToken, checkScanAccess, extractBearerToken } = await import("../lib/gate");
+const { signVerifiedToken, verifyToken, checkScanAccess, extractBearerToken, signScanPass, extractScanPass } =
+  await import("../lib/gate");
 
 let failures = 0;
 function check(label: string, cond: boolean, detail?: string) {
@@ -22,10 +23,15 @@ function check(label: string, cond: boolean, detail?: string) {
   if (!cond) failures++;
 }
 
-function fakeRequest(authHeader?: string): any {
+function fakeRequest(authHeader?: string, scanPassHeader?: string): any {
   return {
     headers: {
-      get: (name: string) => (name.toLowerCase() === "authorization" ? authHeader ?? null : null),
+      get: (name: string) => {
+        const key = name.toLowerCase();
+        if (key === "authorization") return authHeader ?? null;
+        if (key === "x-scan-pass") return scanPassHeader ?? null;
+        return null;
+      },
     },
   };
 }
@@ -119,6 +125,72 @@ async function run() {
   // default parameter; the actual KV round-trip is out of scope for an
   // offline test (needs real credentials, covered by manual/staging testing).
   check("Default store parameter is wired (no crash constructing it)", typeof checkScanAccess === "function");
+
+  // Case 13: extractScanPass pulls X-Scan-Pass verbatim, null when absent.
+  const scanPass = signScanPass();
+  check("Extracts scan-pass from X-Scan-Pass header", extractScanPass(fakeRequest(undefined, scanPass)) === scanPass);
+  check("No X-Scan-Pass header -> null", extractScanPass(fakeRequest()) === null);
+
+  // Case 14: a valid scan-pass grants access WITHOUT touching the free-scan
+  // store — this is the whole point (see the comment in lib/gate.ts). Prove
+  // it by using an IP that already spent its free scan on store1.
+  const passAccess = await checkScanAccess(fakeRequest(undefined, scanPass), freshIp, store1);
+  check(
+    "Valid scan-pass -> allowed, even on an IP that already used its free scan",
+    passAccess.allowed === true && passAccess.reason === "scan-pass"
+  );
+  const stillGated = await checkScanAccess(fakeRequest(), freshIp, store1);
+  check(
+    "...and using the scan-pass didn't reset or re-spend that IP's free-scan credit",
+    stillGated.allowed === false && stillGated.reason === "gate"
+  );
+
+  // Case 15: tampered / garbage / expired scan-pass falls back to the normal
+  // free-scan check rather than granting access or throwing.
+  const store3 = new FakeFreeScanStore();
+  const garbageIp2 = "203.0.113.40";
+  const garbagePassAccess = await checkScanAccess(fakeRequest(undefined, "garbage.pass"), garbageIp2, store3);
+  check(
+    "Garbage scan-pass falls back to free-scan check, doesn't throw",
+    garbagePassAccess.allowed === true && garbagePassAccess.reason === "free-scan"
+  );
+
+  const [passPayloadB64, passSig] = scanPass.split(".");
+  const tamperedPassPayload = Buffer.from(JSON.stringify({ scan: true, exp: Date.now() + 999999 }), "utf8").toString("base64url");
+  const tamperedPass = `${tamperedPassPayload}.${passSig}`;
+  const store4 = new FakeFreeScanStore();
+  const tamperedIp = "203.0.113.50";
+  const tamperedPassAccess = await checkScanAccess(fakeRequest(undefined, tamperedPass), tamperedIp, store4);
+  check(
+    "Tampered scan-pass payload (original sig) falls back to free-scan check",
+    tamperedPassAccess.allowed === true && tamperedPassAccess.reason === "free-scan"
+  );
+
+  const expiredPassPayload = Buffer.from(JSON.stringify({ scan: true, exp: Date.now() - 1000 }), "utf8").toString("base64url");
+  const expiredPassSig = crypto.createHmac("sha256", process.env.GATE_SECRET!).update(expiredPassPayload).digest("hex");
+  const expiredPass = `${expiredPassPayload}.${expiredPassSig}`;
+  const store5 = new FakeFreeScanStore();
+  const expiredPassIp = "203.0.113.60";
+  const expiredPassAccess = await checkScanAccess(fakeRequest(undefined, expiredPass), expiredPassIp, store5);
+  check(
+    "Expired scan-pass falls back to free-scan check",
+    expiredPassAccess.allowed === true && expiredPassAccess.reason === "free-scan"
+  );
+
+  // Case 16: a scan-pass can't be forged from a verified-token payload shape
+  // (no `scan: true` field) even with a correctly-signed signature.
+  const emailShapedPayload = Buffer.from(JSON.stringify({ email: "x@example.com", exp: Date.now() + 999999 }), "utf8").toString(
+    "base64url"
+  );
+  const emailShapedSig = crypto.createHmac("sha256", process.env.GATE_SECRET!).update(emailShapedPayload).digest("hex");
+  const emailShapedPass = `${emailShapedPayload}.${emailShapedSig}`;
+  const store6 = new FakeFreeScanStore();
+  const emailShapedIp = "203.0.113.70";
+  const emailShapedAccess = await checkScanAccess(fakeRequest(undefined, emailShapedPass), emailShapedIp, store6);
+  check(
+    "Correctly-signed but wrong-shaped payload (no scan:true) isn't accepted as a scan-pass",
+    emailShapedAccess.allowed === true && emailShapedAccess.reason === "free-scan"
+  );
 
   console.log(`\n${failures === 0 ? "All gate cases passed." : `${failures} case(s) failed.`}`);
   process.exit(failures === 0 ? 0 : 1);

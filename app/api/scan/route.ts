@@ -5,7 +5,7 @@ import { resolveCorsOrigin, corsHeaders } from "@/lib/cors";
 import { extractPageInfo } from "@/lib/extract-meta";
 import { checkLlmsTxt } from "@/lib/llms-txt";
 import { detectBotBlock } from "@/lib/waf-detect";
-import { checkScanAccess } from "@/lib/gate";
+import { checkScanAccess, signScanPass } from "@/lib/gate";
 
 // This route resolves DNS and streams a raw fetch response, which needs the
 // full Node.js runtime (not the Edge runtime).
@@ -54,6 +54,13 @@ export async function POST(req: NextRequest) {
       403
     );
   }
+  // This route runs first in the scan (it's the domain-validity gate before
+  // SEO/AI checks fire). If access came from spending this visitor's one
+  // free-scan credit, mint a short-lived pass so the SEO/AI calls that follow
+  // don't each independently try to claim (and immediately lose) a free scan
+  // of their own — see lib/gate.ts for the full explanation. Verified callers
+  // already have a bearer token that works everywhere, so they don't need one.
+  const scanPass = access.reason === "free-scan" ? signScanPass() : undefined;
 
   let body: { url?: string };
   try {
@@ -110,6 +117,7 @@ export async function POST(req: NextRequest) {
           server: result.headers["server"] ?? null,
           poweredBy: result.headers["x-powered-by"] ?? null,
         },
+        ...(scanPass ? { scanPass } : {}),
       },
       200
     );

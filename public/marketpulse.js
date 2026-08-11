@@ -79,6 +79,15 @@
       { id: "cwv", name: "Core Web Vitals", desc: "Speed and mobile experience", icon: "M22 12h-4l-3 9L9 3l-3 9H2" },
       { id: "techstack", name: "Tech stack", desc: "What powers the site", icon: "M16 18l6-6-6-6M8 6l-6 6 6 6" }
     ];
+    // Core Web Vitals no longer runs automatically as part of the scan (the
+    // PageSpeed/Lighthouse audit is consistently the slowest of the checks,
+    // and not everyone needs it every time) — it now runs on demand from a
+    // "Run check" button on its row in the results accordion. The scanning
+    // overlay's step list only needs the checks that actually run during the
+    // automatic scan; BONUS_CHECKS itself stays the full list of 3 since the
+    // results accordion still shows a CWV row (just in a "not run yet" state
+    // until the button is clicked — see buildCwvRow/runCwvCheck below).
+    var AUTO_BONUS_CHECKS = BONUS_CHECKS.filter(function (c) { return c.id !== "cwv"; });
     // AI_PROVIDERS (frontend display ids used by the scanning overlay) use
     // short brand names; lib/ai-visibility.ts's ProviderResult.provider field
     // uses the actual API/company names ("openai" for ChatGPT, "anthropic"
@@ -156,15 +165,19 @@
         '</div></div>';
     }
 
+    // Icon badge background is a flat #eaf0ff across all 4 AI providers
+    // (rather than each brand's own tinted color) — keeps the row scannable
+    // as one visual group and matches the requested mockup; each icon's own
+    // foreground color (the brand accent) is untouched.
     aiStepsEl.innerHTML = AI_PROVIDERS.map(function (s) {
-      return stepRow({ id: s.id, name: s.name, desc: s.desc, icon: s.icon, color: s.color, color_bg: s.color + "22", filled: s.filled });
+      return stepRow({ id: s.id, name: s.name, desc: s.desc, icon: s.icon, color: s.color, color_bg: "#eaf0ff", filled: s.filled });
     }).join("");
     var aiStepEls = {};
     Array.prototype.forEach.call(aiStepsEl.querySelectorAll(".mp-step2"), function (el) {
       aiStepEls[el.getAttribute("data-id")] = el;
     });
 
-    bonusStepsEl.innerHTML = BONUS_CHECKS.map(function (s) {
+    bonusStepsEl.innerHTML = AUTO_BONUS_CHECKS.map(function (s) {
       return stepRow({ id: s.id, name: s.name, desc: s.desc, icon: s.icon, color: "#FF8C1A", color_bg: "rgba(255,140,26,.14)" });
     }).join("");
     var stepEls = {};
@@ -212,7 +225,11 @@
     }
     function setState(s) { widget.className = "mp-widget state-" + s; }
 
-    var pendingHost = null; // set right before a scan that then hits the gate, so the modal can retry it
+    // Set right before showing the unlock modal, so submitting it resumes
+    // exactly whatever got gated — a full scan, or just the on-demand Core
+    // Web Vitals check on one accordion row. Generalized from a single
+    // "pendingHost" now that there are two different things that can gate.
+    var pendingGateRetry = null;
     var streamTimer = null;
     var ringTimer = null; // scan-progress ring's simulated-crawl interval
     var aiTimers = []; // AI-provider rows' decorative 2s-spin setTimeouts
@@ -265,14 +282,14 @@
       setState("home"); results.classList.remove("show"); home.style.display = ""; input.value = ""; window.scrollTo({ top: 0 });
     });
 
-    function showGateModal(host) {
-      pendingHost = host;
+    function showGateModal(retryFn) {
+      pendingGateRetry = retryFn;
       overlay.classList.remove("show");
       clearInterval(streamTimer);
       gateError.style.display = "none";
       gateModal.classList.add("show");
     }
-    function hideGateModal() { gateModal.classList.remove("show"); }
+    function hideGateModal() { gateModal.classList.remove("show"); pendingGateRetry = null; }
     document.getElementById("mpGateModalClose").addEventListener("click", function () {
       hideGateModal();
       setState(results.classList.contains("show") ? "results" : "home");
@@ -330,8 +347,9 @@
               ? "Thanks for signing up — unlimited scans until " + formatUnlockDate(expMs) + "."
               : "Thanks for signing up — you have unlimited scans.";
           }
+          var retry = pendingGateRetry;
           hideGateModal();
-          if (pendingHost) startScan(pendingHost);
+          if (retry) retry();
         },
         function (msg) {
           btn.disabled = false;
@@ -444,10 +462,83 @@
         '<div class="mp-acc-body">' + bodyHtml + '</div>';
       return row;
     }
+    // Core Web Vitals' row, before it's ever been run: a "Run check" pill
+    // (styled via .mp-badge-run in place of a grade badge) instead of a
+    // pre-populated result, since nothing was fetched for it during the scan.
+    function buildCwvRow(host, c) {
+      var row = accRow(
+        c.id, c.icon, "rgba(255,140,26,.14)", "#FF8C1A", c.name, c.desc,
+        "mp-badge-run", "Run check",
+        "<p>Not run yet — click “Run check” above to test page speed and Core Web Vitals on mobile.</p>"
+      );
+      row.setAttribute("data-host", host);
+      return row;
+    }
+    // Fires the on-demand /api/pagespeed call for one CWV row and rewrites
+    // it in place once it resolves. Reuses gradePsi/bonusBadge so the final
+    // state matches every other bonus-check row exactly. Gating works the
+    // same as the main scan (this can be this visitor's free scan too, if
+    // they didn't spend it on the bundle, or requires unlock if they did) —
+    // on a gate it resumes this exact row via pendingGateRetry rather than
+    // re-running the whole scan.
+    function runCwvCheck(row) {
+      var host = row.getAttribute("data-host");
+      var badge = row.querySelector(".mp-badge-run");
+      var body = row.querySelector(".mp-acc-body");
+      row.classList.add("mp-cwv-loading", "open");
+      var summary = row.querySelector(".mp-acc-summary");
+      if (summary) summary.setAttribute("aria-expanded", "true");
+      if (badge) { badge.textContent = "Running…"; badge.classList.remove("mp-badge-failed"); badge.classList.add("mp-badge-loading"); }
+      if (body) body.innerHTML = "<p>Testing mobile page speed and Core Web Vitals…</p>";
+
+      fetch(API_BASE + "/api/pagespeed", {
+        method: "POST",
+        headers: Object.assign({ "Content-Type": "application/json" }, authHeaders()),
+        body: JSON.stringify({ url: "https://" + host, strategy: "mobile" })
+      })
+        .then(function (res) { return res.json().then(function (data) { return { ok: res.ok, data: data }; }); })
+        .then(function (r) {
+          row.classList.remove("mp-cwv-loading");
+          if (!r.ok && r.data && r.data.error === "gate") {
+            if (badge) { badge.textContent = "Run check"; badge.classList.remove("mp-badge-loading"); }
+            if (body) body.innerHTML = "<p>Not run yet — click “Run check” above to test page speed and Core Web Vitals on mobile.</p>";
+            showGateModal(function () { runCwvCheck(row); });
+            return;
+          }
+          if (!r.ok) {
+            var msg = (r.data && (r.data.message || r.data.error)) || "This check failed.";
+            if (badge) { badge.textContent = "Retry"; badge.classList.remove("mp-badge-loading"); badge.classList.add("mp-badge-failed"); }
+            if (body) body.innerHTML = "<p>" + escapeHtml(msg) + "</p>";
+            return;
+          }
+          var graded = gradePsi(r.data);
+          var finalBadge = bonusBadge("cwv", graded);
+          if (badge) badge.outerHTML = '<span class="mp-badge ' + finalBadge.cls + '">' + finalBadge.label + "</span>";
+          if (body) body.innerHTML = "<p><b>" + escapeHtml(graded.head) + ".</b> " + escapeHtml(graded.body) + "</p>";
+        })
+        .catch(function () {
+          row.classList.remove("mp-cwv-loading");
+          if (badge) { badge.textContent = "Retry"; badge.classList.remove("mp-badge-loading"); badge.classList.add("mp-badge-failed"); }
+          if (body) body.innerHTML = "<p>Network error — try again.</p>";
+        });
+    }
+
     // Toggle is delegated once on the results section rather than wired per
     // row — rows get rebuilt from scratch on every scan, a single listener
     // here avoids re-binding (and the memory-leak risk of forgetting to).
     results.addEventListener("click", function (e) {
+      // The CWV row's "Run check" pill sits inside the same <button> used for
+      // the accordion toggle (badges can't be a nested real <button>, so it's
+      // a styled span instead) — check for it first and short-circuit, or a
+      // click on it would also toggle the row open/closed as a side effect.
+      var runBtn = e.target.closest && e.target.closest(".mp-badge-run");
+      if (runBtn) {
+        e.preventDefault();
+        e.stopPropagation();
+        var runRow = runBtn.closest(".mp-acc-row");
+        if (runRow && !runRow.classList.contains("mp-cwv-loading")) runCwvCheck(runRow);
+        return;
+      }
       var btn = e.target.closest && e.target.closest(".mp-acc-summary");
       if (!btn) return;
       var row = btn.closest(".mp-acc-row");
@@ -513,67 +604,33 @@
       if (state === "done") el.classList.add("done");
     }
 
-    // Ring percentage is deliberately NOT an equal split across the 4 real
-    // calls. Core Web Vitals (the PageSpeed/Lighthouse audit) is consistently
-    // the slowest of the four, usually by a wide margin — an equal-weighted
-    // "1 of 4 done = 25%" scheme either sits at 75% for most of the wait (if
-    // CWV finishes last, the common case) or misleadingly hits 100% early (if
-    // it happens to finish first). Instead the ring crawls toward 90% on a
-    // timer calibrated to how long CWV usually takes, then snaps to 100% the
-    // moment the real /api/pagespeed call actually resolves — so it reads
-    // accurately regardless of which call happens to finish last.
-    var CWV_ESTIMATE_MS = 9000;
+    // Ring percentage covers Stage B only (SEO + AI — see startScan below).
+    // AI visibility (querying 4 LLM providers) is consistently the slower of
+    // the two, usually by a wide margin — an equal-weighted "1 of 2 done =
+    // 50%" scheme either sits at 50% for most of the wait or misleadingly
+    // hits 100% early. Instead the ring crawls toward 90% on a timer
+    // calibrated to how long that usually takes, then snaps to 100% the
+    // moment both real calls actually resolve.
+    var SCAN_ESTIMATE_MS = 9000;
 
     function startScan(host) {
-      pendingHost = host;
       setState("scanning");
       Object.keys(stepEls).forEach(function (id) { setStep(id, "active"); });
       Object.keys(aiStepEls).forEach(function (id) { setAiStep(id, "pending"); });
       overlay.classList.add("show");
+      stream.textContent = "> verifying " + host + "…";
 
       var domain = "https://" + host;
       var keyword = deriveKeyword(host);
       var aiPrompt = "is " + keyword + " worth it?";
-
-      var ringV = 0;
-      function renderRing(v) {
-        scanRing.style.setProperty("--v", v);
-        scanRingNum.textContent = v;
-      }
-      renderRing(0);
-      ringTimer = setInterval(function () {
-        ringV += (90 - ringV) * 0.06; // eases toward 90, never quite reaching it on its own
-        renderRing(Math.round(ringV));
-      }, CWV_ESTIMATE_MS / 45);
-      function finishRing() {
-        clearInterval(ringTimer);
-        renderRing(100);
-      }
-
-      // Each AI provider row spins for ~2s, staggered slightly so they don't
-      // all flip at the exact same instant — purely a visual flourish, not
-      // tied to when the real /api/ai-visibility call actually finishes.
-      AI_PROVIDERS.forEach(function (p, i) {
-        aiTimers.push(setTimeout(function () { setAiStep(p.id, "done"); }, 2000 + i * 350));
-      });
-
-      streamTimer = setInterval(function () {
-        var activeBonusIds = Object.keys(stepEls).filter(function (id) { return stepEls[id].classList.contains("active"); });
-        var pendingAiIds = Object.keys(aiStepEls).filter(function (id) { return !aiStepEls[id].classList.contains("done"); });
-        var pool = activeBonusIds.concat(pendingAiIds);
-        if (pool.length === 0) return;
-        var id = pool[Math.floor(Math.random() * pool.length)];
-        var lines = STREAM_LINES[id] || [];
-        if (lines.length) stream.textContent = "> " + host + " · " + lines[Math.floor(Math.random() * lines.length)];
-      }, 170);
-
       var results4 = {};
       var gated = false;
+      var scanPass = null;
 
-      function call(path, body, id) {
+      function call(path, body, id, extraHeaders) {
         return fetch(API_BASE + path, {
           method: "POST",
-          headers: Object.assign({ "Content-Type": "application/json" }, authHeaders()),
+          headers: Object.assign({ "Content-Type": "application/json" }, authHeaders(), extraHeaders || {}),
           body: JSON.stringify(body)
         })
           .then(function (res) { return res.json().then(function (data) { return { status: res.status, ok: res.ok, data: data }; }); })
@@ -581,35 +638,93 @@
             if (!r.ok && r.data && r.data.error === "gate") { gated = true; }
             results4[id] = r;
             setStep(id, r.ok ? "done" : "failed");
-            if (id === "cwv") finishRing();
             return r;
           })
           .catch(function () {
-            results4[id] = { ok: false, data: { error: "Network error." } };
+            var fallback = { status: 0, ok: false, data: { error: "Network error." } };
+            results4[id] = fallback;
             setStep(id, "failed");
-            if (id === "cwv") finishRing();
+            return fallback; // callers that read the resolved value (Stage A below) need this, not undefined
           });
       }
 
-      Promise.all([
-        call("/api/scan", { url: domain }, "techstack"),
-        // Mobile-only: marketpulse.js only ever shows one Core Web Vitals
-        // result, so skip the (unused here) desktop audit — cuts this call's
-        // wall-clock time roughly in half. app/page.tsx and embed.js don't
-        // pass this and keep getting both, since they render both.
-        call("/api/pagespeed", { url: domain, strategy: "mobile" }, "cwv"),
-        call("/api/seo-rank", { domain: host, keyword: keyword }, "seo"),
-        call("/api/ai-visibility", { domain: host, prompts: [aiPrompt] }, "ai")
-      ]).then(function () {
-        clearScanTimers();
+      // Stage A: tech stack alone, as a fast validity gate. If the domain
+      // can't even be reached there's no point burning the SEO/AI calls (or
+      // this visitor's one free scan) on it — abort straight back to the
+      // search box with an inline error instead of running the rest.
+      call("/api/scan", { url: domain }, "techstack").then(function (r) {
         if (gated) {
+          clearScanTimers();
           stream.textContent = "";
-          showGateModal(host);
+          showGateModal(function () { startScan(host); });
           return;
         }
-        stream.textContent = "> report ready ✓";
-        setTimeout(function () { showResults(host, results4); }, 500);
+        if (!r || !r.ok) {
+          clearScanTimers();
+          overlay.classList.remove("show");
+          home.style.display = "";
+          setState("home");
+          showUrlError("Please check the URL you entered and run it again.");
+          return;
+        }
+        // This route is always first in a scan, so it's the one that claims
+        // the free-scan credit if this visitor doesn't have a verified
+        // token yet. It hands back a short-lived pass so the SEO/AI calls
+        // below don't each independently try (and fail) to claim their own
+        // — see lib/gate.ts for why that matters.
+        if (r.data && r.data.scanPass) scanPass = r.data.scanPass;
+        runStageB();
       });
+
+      function runStageB() {
+        var ringV = 0;
+        function renderRing(v) {
+          scanRing.style.setProperty("--v", v);
+          scanRingNum.textContent = v;
+        }
+        renderRing(0);
+        ringTimer = setInterval(function () {
+          ringV += (90 - ringV) * 0.06; // eases toward 90, never quite reaching it on its own
+          renderRing(Math.round(ringV));
+        }, SCAN_ESTIMATE_MS / 45);
+        function finishRing() {
+          clearInterval(ringTimer);
+          renderRing(100);
+        }
+
+        // Each AI provider row spins for ~2s, staggered slightly so they don't
+        // all flip at the exact same instant — purely a visual flourish, not
+        // tied to when the real /api/ai-visibility call actually finishes.
+        AI_PROVIDERS.forEach(function (p, i) {
+          aiTimers.push(setTimeout(function () { setAiStep(p.id, "done"); }, 2000 + i * 350));
+        });
+
+        streamTimer = setInterval(function () {
+          var activeBonusIds = Object.keys(stepEls).filter(function (id) { return stepEls[id].classList.contains("active"); });
+          var pendingAiIds = Object.keys(aiStepEls).filter(function (id) { return !aiStepEls[id].classList.contains("done"); });
+          var pool = activeBonusIds.concat(pendingAiIds);
+          if (pool.length === 0) return;
+          var id = pool[Math.floor(Math.random() * pool.length)];
+          var lines = STREAM_LINES[id] || [];
+          if (lines.length) stream.textContent = "> " + host + " · " + lines[Math.floor(Math.random() * lines.length)];
+        }, 170);
+
+        var passHeaders = scanPass ? { "X-Scan-Pass": scanPass } : {};
+        Promise.all([
+          call("/api/seo-rank", { domain: host, keyword: keyword }, "seo", passHeaders),
+          call("/api/ai-visibility", { domain: host, prompts: [aiPrompt] }, "ai", passHeaders)
+        ]).then(function () {
+          finishRing();
+          clearScanTimers();
+          if (gated) {
+            stream.textContent = "";
+            showGateModal(function () { startScan(host); });
+            return;
+          }
+          stream.textContent = "> report ready ✓";
+          setTimeout(function () { showResults(host, results4); }, 500);
+        });
+      }
     }
 
     // If they unlocked on a previous visit, the token's still sitting in
@@ -702,18 +817,26 @@
       AI_PROVIDERS.forEach(function (p, i) {
         var pr = findProviderResult(aiData, PROVIDER_ID_MAP[p.id]);
         var badge = aiSentimentBadge(pr);
-        var row = accRow(p.id, p.icon, p.color + "22", p.color, p.name, p.desc, badge.cls, badge.label, aiRowBody(pr, aiCallFailedMsg), p.filled);
+        var row = accRow(p.id, p.icon, "#eaf0ff", p.color, p.name, p.desc, badge.cls, badge.label, aiRowBody(pr, aiCallFailedMsg), p.filled);
         row.style.animationDelay = (i * 55) + "ms";
         aiAccordion.appendChild(row);
       });
 
       // ---- "Bonus checks" accordion — the 3 non-AI real checks ----
+      // Core Web Vitals never ran automatically (see AUTO_BONUS_CHECKS above)
+      // — its row renders in a "not run yet" state with a Run check button
+      // instead of a grade, since there's no results4.cwv to grade yet.
       bonusAccordion.innerHTML = "";
       BONUS_CHECKS.forEach(function (c, i) {
-        var graded = gradeOf(c.id);
-        var badge = bonusBadge(c.id, graded);
-        var bodyHtml = "<p><b>" + escapeHtml(graded.head) + ".</b> " + escapeHtml(graded.body) + "</p>";
-        var row = accRow(c.id, c.icon, "rgba(255,140,26,.14)", "#FF8C1A", c.name, c.desc, badge.cls, badge.label, bodyHtml);
+        var row;
+        if (c.id === "cwv") {
+          row = buildCwvRow(host, c);
+        } else {
+          var graded = gradeOf(c.id);
+          var badge = bonusBadge(c.id, graded);
+          var bodyHtml = "<p><b>" + escapeHtml(graded.head) + ".</b> " + escapeHtml(graded.body) + "</p>";
+          row = accRow(c.id, c.icon, "rgba(255,140,26,.14)", "#FF8C1A", c.name, c.desc, badge.cls, badge.label, bodyHtml);
+        }
         row.style.animationDelay = ((AI_PROVIDERS.length + i) * 55) + "ms";
         bonusAccordion.appendChild(row);
       });

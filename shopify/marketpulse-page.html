@@ -43,13 +43,30 @@
   "Coming soon" and show no fabricated data — swap them for real checks as
   you build them out (search "COMING_SOON" below).
 
+  Scan sequencing: tech stack runs first, alone, as a fast validity gate —
+  if the domain can't be reached (bad URL, DNS failure, etc.) the scan aborts
+  right there with an inline "please check the URL you entered" message, and
+  Google ranking / AI visibility never fire (no point burning those calls, or
+  this visitor's free scan, on a domain that doesn't resolve). Only once tech
+  stack succeeds do ranking + AI visibility run together. Core Web Vitals
+  (the PageSpeed/Lighthouse audit — consistently the slowest check) no longer
+  runs automatically at all: its row in the results accordion starts in a
+  "Run check" state and only fires /api/pagespeed when that button is
+  clicked, independently of the rest of the scan.
+
   Free-scan / email gate: first scan (per IP, resets every 24h) runs with no
-  email. Any scan after that gets a 403 with {error:"gate"} from every one of
-  the 4 API routes at once — this page catches that and shows the
-  email-capture modal instead of an error. A validated email is POSTed to
-  /api/lead, which returns a signed token (stored in localStorage, sent back
-  as `Authorization: Bearer`) that unlocks unlimited scans for 180 days and
-  (best-effort) tags the email as a "marketpulse-lead" customer in Shopify.
+  email. Any scan after that gets a 403 with {error:"gate"} — this page
+  catches that and shows the email-capture modal instead of an error. A
+  validated email is POSTed to /api/lead, which returns a signed token
+  (stored in localStorage, sent back as `Authorization: Bearer`) that unlocks
+  unlimited scans for 180 days and (best-effort) tags the email as a
+  "marketpulse-lead" customer in Shopify. Under the hood, only the first call
+  in a scan (tech stack) actually claims the free-scan credit; it hands back
+  a short-lived pass that the ranking/AI calls attach to their own requests
+  so they don't each try to claim (and immediately lose) a separate free
+  scan of their own — see the comment above signScanPass in lib/gate.ts if
+  you're touching that logic. The on-demand Core Web Vitals button is gated
+  independently of the bundle, same as any other check.
 
   Search field only accepts input that looks like a real domain before
   calling the API (see isPlausibleWebsite in marketpulse.js) — real
@@ -199,6 +216,10 @@
     .mp-acc-summary .meta .t{font-size:14.5px;font-weight:700;color:var(--navy-800)}
     .mp-acc-summary .meta .d{font-size:12.5px;color:var(--slate);margin-top:1px}
     .mp-badge{font-family:'Poppins';font-weight:800;font-size:11.5px;padding:4px 12px;border-radius:999px;white-space:nowrap;flex:none}
+    .mp-badge-run{background:var(--navy-500);color:#fff;cursor:pointer;transition:opacity .15s ease}
+    .mp-badge-run:hover{opacity:.85}
+    .mp-badge-run.mp-badge-loading{background:var(--line);color:var(--muted);cursor:default}
+    .mp-badge-run.mp-badge-failed{background:rgba(240,68,56,.12);color:var(--red)}
     .mp-acc-chev{flex:none;color:var(--muted);transition:transform .2s ease;display:flex}
     .mp-acc-row.open .mp-acc-chev{transform:rotate(180deg)}
     .mp-acc-body{display:none;padding:0 18px 18px 70px;font-size:13px;color:var(--slate);line-height:1.55}

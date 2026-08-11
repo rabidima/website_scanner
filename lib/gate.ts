@@ -100,6 +100,71 @@ export function extractBearerToken(req: NextRequest): string | null {
   return match ? match[1] : null;
 }
 
+// A single "scan" from the browser's point of view is actually several
+// independent API calls (tech stack, then SEO + AI in parallel). Each route
+// calls checkScanAccess() on its own — which is correct, each one needs to
+// be independently abuse-resistant, since nothing stops someone from calling
+// /api/seo-rank or /api/ai-visibility directly without ever hitting
+// /api/scan first. But it means a naive "claim the free scan" check on every
+// route consumes a *separate* free-scan credit per call: the first call
+// claims it, and every other call in the same batch immediately sees the
+// credit already spent and gets gated — even though, from the visitor's
+// perspective, this is still their one free scan.
+//
+// The fix is a short-lived scan-pass: whoever's first call actually claims
+// the free-scan credit (currently always /api/scan, since the frontend now
+// calls it first as a validity gate) mints this token and hands it back in
+// the response. The frontend attaches it to the rest of that scan's calls
+// via X-Scan-Pass, and those calls trust it instead of claiming another
+// free-scan credit. It's deliberately not reusable across scans: 5 minutes
+// is comfortably longer than a real scan takes, short enough that holding
+// onto one isn't a meaningful way to dodge the gate.
+const SCAN_PASS_TTL_MS = 5 * 60 * 1000;
+
+export function signScanPass(): string {
+  const exp = Date.now() + SCAN_PASS_TTL_MS;
+  const payloadB64 = Buffer.from(JSON.stringify({ scan: true, exp }), "utf8").toString("base64url");
+  return `${payloadB64}.${sign(payloadB64)}`;
+}
+
+function verifyScanPass(token: string | undefined | null): boolean {
+  if (!token) return false;
+  const parts = token.split(".");
+  if (parts.length !== 2) return false;
+  const [payloadB64, sig] = parts;
+
+  let expectedSig: string;
+  try {
+    expectedSig = sign(payloadB64);
+  } catch {
+    return false; // GATE_SECRET missing — fail closed
+  }
+
+  const sigBuf = Buffer.from(sig, "hex");
+  const expectedBuf = Buffer.from(expectedSig, "hex");
+  if (sigBuf.length !== expectedBuf.length || !crypto.timingSafeEqual(sigBuf, expectedBuf)) {
+    return false;
+  }
+
+  let parsed: { scan?: unknown; exp?: unknown };
+  try {
+    parsed = JSON.parse(Buffer.from(payloadB64, "base64url").toString("utf8"));
+  } catch {
+    return false;
+  }
+
+  if (parsed.scan !== true || typeof parsed.exp !== "number") return false;
+  if (Date.now() > parsed.exp) return false;
+
+  return true;
+}
+
+/** Pulls the scan-pass token out of the X-Scan-Pass header, if present. */
+export function extractScanPass(req: NextRequest): string | null {
+  const header = req.headers.get("x-scan-pass");
+  return header && header.trim() ? header.trim() : null;
+}
+
 // Free scan resets every 24h per IP. Not "once ever" on purpose — offices,
 // cafes, and carrier NAT put many real visitors behind one IP, and a hard
 // lifetime cap would gate out people who never got their own free scan in
@@ -137,6 +202,7 @@ const defaultFreeScanStore: FreeScanStore = new KvFreeScanStore();
 
 export type ScanAccess =
   | { allowed: true; reason: "verified"; email: string }
+  | { allowed: true; reason: "scan-pass" }
   | { allowed: true; reason: "free-scan" }
   | { allowed: false; reason: "gate" };
 
@@ -149,6 +215,13 @@ export async function checkScanAccess(
   const verified = verifyToken(extractBearerToken(req));
   if (verified) {
     return { allowed: true, reason: "verified", email: verified.email };
+  }
+
+  // Rides along on the free-scan credit an earlier call in this same batch
+  // already claimed — see the comment above extractScanPass for why this
+  // exists. Checked before claimFreeScan so it never touches the counter.
+  if (verifyScanPass(extractScanPass(req))) {
+    return { allowed: true, reason: "scan-pass" };
   }
 
   const gotFreeScan = await store.claimFreeScan(ip);
