@@ -50,12 +50,9 @@
   this visitor's free scan, on a domain that doesn't resolve). Only once tech
   stack succeeds do ranking + AI visibility run together. Core Web Vitals
   (the PageSpeed/Lighthouse audit — consistently the slowest check) never
-  runs automatically: it's opt-in via a "Run check" button that appears in
-  two places sharing the same /api/pagespeed call — the scanning overlay
-  (lets it start in parallel with the rest of the scan) and the results
-  accordion (lets it start after the fact if it wasn't run earlier). If it
-  finishes in the overlay before the main scan does, the accordion shows the
-  real grade immediately instead of its own button.
+  runs automatically and never appears in the scanning overlay at all — it's
+  opt-in only from a "Run check" button on its row in the results accordion
+  (last, after Tech stack), which fires /api/pagespeed on click.
 
   AI-visibility prompt: "Is {website}.com legit and trustworthy?" — uses the
   full domain (not a stripped/derived keyword), both because it reads more
@@ -64,6 +61,12 @@
   directly on top of the normalized brand name — this measurably improves
   detection accuracy for domains where the brand name and the domain slug
   don't match cleanly (e.g. "pyleusa.com" vs. the brand "Pyle").
+
+  Fonts: this block no longer sets font-family anywhere (all removed on
+  request, to let the store's own theme fonts cascade in). That includes
+  buttons/inputs, which browsers don't inherit font-family on by default —
+  if your theme doesn't already set a font on form controls globally, those
+  may render in the browser's default UI font until it does.
 
   Free-scan / email gate: first scan (per IP, resets every 24h) runs with no
   email. Any scan after that gets a 403 with {error:"gate"} — this page
@@ -92,13 +95,11 @@
       --ink:#0C2247; --slate:#5B6b82; --muted:#8b97ab; --line:#E6EBF3;
       --bg:#ffffff; --bg-soft:#F5F8FC; --green:#12B76A; --amber:#F79009; --red:#F04438;
       --shadow:0 12px 40px rgba(12,34,71,.10); --shadow-lg:0 30px 80px rgba(12,34,71,.22); --radius:20px;
-      font-family:'Inter',system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;
       color:var(--ink); background:var(--bg); -webkit-font-smoothing:antialiased;
       display:flex; flex-direction:column; min-height:100vh; position:relative; overflow-x:hidden;
     }
     .mp-widget *{box-sizing:border-box}
     .mp-widget a{color:inherit;text-decoration:none}
-    .mp-widget button{font-family:inherit}
     .mp-widget::before{
       content:"";position:fixed;inset:0;z-index:-2;pointer-events:none;
       background:
@@ -127,10 +128,10 @@
     .mp-eyebrow{display:inline-flex;align-items:center;gap:8px;background:rgba(255,140,26,.1);border:1px solid rgba(255,140,26,.28);color:var(--orange-dark);font-weight:700;font-size:12.5px;letter-spacing:.4px;padding:7px 15px;border-radius:999px;margin-bottom:22px}
     .mp-eyebrow .mp-live{width:8px;height:8px;border-radius:50%;background:var(--orange);animation:mp-livepulse 1.8s infinite}
     @keyframes mp-livepulse{0%{box-shadow:0 0 0 0 rgba(255,140,26,.6)}70%{box-shadow:0 0 0 8px rgba(255,140,26,0)}100%{box-shadow:0 0 0 0 rgba(255,140,26,0)}}
-    .mp-wordmark{font-family:'Poppins',sans-serif;font-weight:900;font-size:clamp(48px,8.5vw,82px);line-height:.98;letter-spacing:-2px;margin-bottom:14px}
+    .mp-wordmark{font-weight:900;font-size:clamp(48px,8.5vw,82px);line-height:.98;letter-spacing:-2px;margin-bottom:14px}
     .mp-wordmark .a{color:var(--navy-800)}
     .mp-wordmark .b{background:linear-gradient(120deg,var(--orange),var(--orange-dark));-webkit-background-clip:text;background-clip:text;color:transparent}
-    .mp-wordmark .ai{font-family:'Inter',sans-serif;font-size:.26em;font-weight:800;vertical-align:super;background:linear-gradient(135deg,var(--navy-800),var(--navy-700));color:#fff;padding:5px 9px;border-radius:9px;margin-left:10px;letter-spacing:.5px;box-shadow:0 6px 16px rgba(12,34,71,.3)}
+    .mp-wordmark .ai{font-size:.26em;font-weight:800;vertical-align:super;background:linear-gradient(135deg,var(--navy-800),var(--navy-700));color:#fff;padding:5px 9px;border-radius:9px;margin-left:10px;letter-spacing:.5px;box-shadow:0 6px 16px rgba(12,34,71,.3)}
     .mp-tag{color:var(--navy-700);font-size:clamp(16px,2.5vw,20px);font-weight:600;margin-bottom:8px;line-height:1.45}
     .mp-tag .hl{color:var(--orange-dark)}
     .mp-powered{font-size:13px;color:var(--muted);margin-bottom:30px}
@@ -140,7 +141,7 @@
     .mp-scanbar-wrap:focus-within::before{opacity:.9}
     .mp-scanbar{position:relative;z-index:1;display:flex;align-items:center;width:100%;background:#fff;border:1.5px solid var(--line);border-radius:999px;padding:8px 8px 8px 22px;box-shadow:var(--shadow)}
     .mp-scanbar .mp-globe{color:var(--navy-500);flex:none;display:flex}
-    .mp-scanbar input{flex:1;border:0;outline:0;font-size:17px;padding:15px 14px;color:var(--ink);font-family:inherit;background:transparent}
+    .mp-scanbar input{flex:1;border:0;outline:0;font-size:17px;padding:15px 14px;color:var(--ink);background:transparent}
     .mp-scanbar input::placeholder{color:var(--muted)}
     .mp-btn-scan{flex:none;background:linear-gradient(135deg,var(--orange),var(--orange-dark));color:#fff;border:0;cursor:pointer;font-weight:800;font-size:16px;padding:15px 30px;border-radius:999px;display:flex;align-items:center;gap:9px;box-shadow:0 10px 24px rgba(255,140,26,.42)}
     .mp-subline{margin-top:16px;color:var(--muted);font-size:13.5px}
@@ -159,15 +160,15 @@
     @keyframes mp-fade{from{opacity:0}to{opacity:1}}
     .mp-ov-brand{display:flex;align-items:center;justify-content:center;gap:9px;margin-bottom:26px}
     .mp-ov-brand img{width:26px;height:26px;border-radius:7px}
-    .mp-ov-brand span{font-family:'Poppins';font-weight:800;font-size:15px;color:#fff;letter-spacing:.2px}
+    .mp-ov-brand span{font-weight:800;font-size:15px;color:#fff;letter-spacing:.2px}
     .mp-ov-brand span b{color:var(--orange-2)}
     .mp-ov-brand span i{font-style:normal;font-size:9.5px;font-weight:800;background:rgba(255,255,255,.14);padding:2px 6px;border-radius:5px;margin-left:3px;vertical-align:2px;letter-spacing:.3px}
-    .mp-scan-title{font-family:'Poppins';font-weight:800;font-size:clamp(24px,4.2vw,34px);margin-bottom:10px}
+    .mp-scan-title{font-weight:800;font-size:clamp(24px,4.2vw,34px);margin-bottom:10px}
     .mp-scan-title .dom{color:var(--orange-2);word-break:break-all}
     .mp-scan-sub{font-size:14.5px;color:#a9c0e0;margin-bottom:28px;max-width:420px}
     .mp-scan-ring{--v:0;width:150px;height:150px;border-radius:50%;margin:0 auto 16px;flex:none;display:flex;align-items:center;justify-content:center;background:conic-gradient(var(--orange) calc(var(--v)*1%), rgba(255,255,255,.14) 0);box-shadow:0 12px 34px rgba(0,0,0,.28);transition:background .25s linear}
     .mp-scan-ring .inner{width:120px;height:120px;border-radius:50%;background:#0E2A52;display:flex;flex-direction:column;align-items:center;justify-content:center}
-    .mp-scan-ring .num{font-family:'Poppins';font-weight:900;font-size:34px;color:#fff;line-height:1;display:inline-block}
+    .mp-scan-ring .num{font-weight:900;font-size:34px;color:#fff;line-height:1;display:inline-block}
     .mp-scan-ring .pctsign{font-size:16px;color:#fff;font-weight:800;margin-left:1px;display:inline-block}
     .mp-scan-ring .lbl{font-size:10px;letter-spacing:1.2px;color:#9fc0f0;font-weight:700;margin-top:4px}
     .mp-mini-radar{position:relative;width:16px;height:16px;flex:none}
@@ -176,7 +177,7 @@
     .mp-mini-radar .c{position:absolute;inset:5px;border-radius:50%;background:var(--orange)}
     @keyframes mp-spin{to{transform:rotate(360deg)}}
     @keyframes mp-pulse{0%,100%{transform:scale(.85);opacity:.85}50%{transform:scale(1.1);opacity:1}}
-    .mp-datastream{margin:0 0 24px;font-family:ui-monospace,Menlo,monospace;font-size:11.5px;color:rgba(255,255,255,.42);height:15px}
+    .mp-datastream{margin:0 0 24px;font-size:11.5px;color:rgba(255,255,255,.42);height:15px}
     .mp-steps-card{width:100%;max-width:490px;background:rgba(9,25,51,.6);border:1px solid rgba(255,255,255,.09);border-radius:22px;padding:22px 22px 10px;text-align:left;box-shadow:0 20px 50px rgba(0,0,0,.25)}
     .mp-steps-group + .mp-steps-group{margin-top:18px;padding-top:18px;border-top:1px solid rgba(255,255,255,.08)}
     .mp-steps-hd{font-size:11px;letter-spacing:1.1px;font-weight:800;color:#9fc0f0;margin-bottom:14px;display:flex;align-items:center;gap:9px}
@@ -197,42 +198,36 @@
     .mp-step2.failed .status .cross{display:inline-flex}
     .mp-step2.failed .status .txt-fail{display:inline}
     .mp-step2.done .status .mp-mini-radar,.mp-step2.failed .status .mp-mini-radar{display:none}
-    .mp-step2 .status .run{display:none;background:rgba(255,140,26,.22);color:#ffd9ad;font-family:inherit;font-size:11px;font-weight:700;padding:5px 12px;border-radius:999px;border:0;cursor:pointer;white-space:nowrap}
-    .mp-step2 .status .run:hover{background:rgba(255,140,26,.32)}
-    .mp-step2.runnable .status .run{display:inline-flex}
-    .mp-step2.runnable .status .mp-mini-radar{display:none}
-    .mp-step2.runnable.active .status .mp-mini-radar{display:flex}
-    .mp-step2.runnable.active .status .run,.mp-step2.done .status .run,.mp-step2.failed .status .run{display:none}
     .mp-cancel{margin-top:22px;background:none;border:0;color:rgba(255,255,255,.55);font-size:13px;cursor:pointer;text-decoration:underline}
     .mp-results{display:none;width:100%;max-width:1080px;margin:0 auto;text-align:left;animation:mp-rise .5s ease both}
     .mp-results.show{display:block}
     .mp-res-head{text-align:center;margin-bottom:6px}
     .mp-res-head .site{color:var(--slate);font-size:13.5px}
     .mp-res-head .site b{color:var(--navy-800)}
-    .mp-res-head h2{font-family:'Poppins';font-size:clamp(25px,4vw,34px);color:var(--navy-800);margin-top:4px}
+    .mp-res-head h2{font-size:clamp(25px,4vw,34px);color:var(--navy-800);margin-top:4px}
     .mp-overall{display:flex;align-items:center;justify-content:center;gap:22px;margin:24px 0 36px;flex-wrap:wrap}
     .mp-score-ring{--v:0;width:128px;height:128px;border-radius:50%;flex:none;display:flex;align-items:center;justify-content:center;background:conic-gradient(var(--amber) calc(var(--v)*1%), #E9EEF6 0);box-shadow:0 10px 30px rgba(12,34,71,.12)}
     .mp-score-ring .inner{width:98px;height:98px;border-radius:50%;background:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center}
-    .mp-score-ring .num{font-family:'Poppins';font-weight:900;font-size:32px;color:var(--navy-800);line-height:1}
+    .mp-score-ring .num{font-weight:900;font-size:32px;color:var(--navy-800);line-height:1}
     .mp-score-ring .of{font-size:11px;color:var(--slate)}
     .mp-overall .verdict{max-width:380px}
-    .mp-overall .verdict h3{font-family:'Poppins';font-size:20px;color:var(--navy-800);margin-bottom:5px}
+    .mp-overall .verdict h3{font-size:20px;color:var(--navy-800);margin-bottom:5px}
     .mp-overall .verdict p{color:var(--slate);font-size:14px;line-height:1.55}
     .mp-score-ring .lbl{font-size:10px;letter-spacing:1px;text-transform:uppercase;color:var(--muted);font-weight:800;margin-top:2px}
     .mp-stat-row{display:flex;gap:14px;justify-content:center;flex-wrap:wrap;margin:0 0 34px}
     .mp-stat{background:#fff;border:1px solid var(--line);border-radius:16px;padding:16px 24px;text-align:center;min-width:150px;box-shadow:0 4px 14px rgba(12,34,71,.05)}
-    .mp-stat .v{font-family:'Poppins';font-weight:800;font-size:22px;color:var(--navy-800)}
+    .mp-stat .v{font-weight:800;font-size:22px;color:var(--navy-800)}
     .mp-stat .l{font-size:11.5px;color:var(--slate);margin-top:3px}
     .mp-acc-group{margin-bottom:26px}
     .mp-acc-group-hd{font-size:12px;letter-spacing:1.1px;text-transform:uppercase;color:var(--muted);font-weight:800;margin-bottom:12px}
     .mp-acc{display:flex;flex-direction:column;gap:10px}
     .mp-acc-row{background:#fff;border:1px solid var(--line);border-radius:16px;overflow:hidden;box-shadow:0 4px 14px rgba(12,34,71,.04);animation:mp-rise .5s ease both}
-    .mp-acc-summary{width:100%;display:flex;align-items:center;gap:14px;padding:16px 18px;border:0;background:none;cursor:pointer;text-align:left;font-family:inherit}
+    .mp-acc-summary{width:100%;display:flex;align-items:center;gap:14px;padding:16px 18px;border:0;background:none;cursor:pointer;text-align:left}
     .mp-acc-summary .ic{width:38px;height:38px;border-radius:11px;flex:none;display:flex;align-items:center;justify-content:center}
     .mp-acc-summary .meta{flex:1;min-width:0}
     .mp-acc-summary .meta .t{font-size:14.5px;font-weight:700;color:var(--navy-800)}
     .mp-acc-summary .meta .d{font-size:12.5px;color:var(--slate);margin-top:1px}
-    .mp-badge{font-family:'Poppins';font-weight:800;font-size:11.5px;padding:4px 12px;border-radius:999px;white-space:nowrap;flex:none}
+    .mp-badge{font-weight:800;font-size:11.5px;padding:4px 12px;border-radius:999px;white-space:nowrap;flex:none}
     .mp-badge-run{background:var(--navy-500);color:#fff;cursor:pointer;transition:opacity .15s ease}
     .mp-badge-run:hover{opacity:.85}
     .mp-badge-run.mp-badge-loading{background:var(--line);color:var(--muted);cursor:default}
@@ -251,7 +246,7 @@
     .mp-card .top{display:flex;align-items:center;justify-content:space-between;margin:6px 0 12px}
     .mp-card .icon{width:40px;height:40px;border-radius:12px;display:flex;align-items:center;justify-content:center;color:#fff;background:linear-gradient(135deg,var(--orange),var(--orange-dark));box-shadow:0 6px 14px rgba(255,140,26,.3)}
     .mp-card.locked .icon{background:linear-gradient(135deg,#a9b4c6,#8b97ab);box-shadow:none}
-    .mp-card .grade{font-family:'Poppins';font-weight:800;font-size:15px;padding:4px 12px;border-radius:999px}
+    .mp-card .grade{font-weight:800;font-size:15px;padding:4px 12px;border-radius:999px}
     .mp-g-good{background:rgba(18,183,106,.12);color:var(--green)}
     .mp-g-mid{background:rgba(247,144,9,.14);color:var(--amber)}
     .mp-g-bad{background:rgba(240,68,56,.12);color:var(--red)}
@@ -265,12 +260,12 @@
     .mp-upsell::after{content:"";position:absolute;right:-70px;top:-70px;width:240px;height:240px;border-radius:50%;background:radial-gradient(circle,rgba(255,140,26,.32),transparent 70%)}
     .mp-upsell .u-left{position:relative;z-index:1;max-width:580px}
     .mp-upsell .pill{display:inline-block;background:rgba(255,140,26,.2);color:#ffd9ad;font-weight:700;font-size:12px;padding:5px 13px;border-radius:999px;margin-bottom:13px;letter-spacing:.3px}
-    .mp-upsell h3{font-family:'Poppins';font-size:24px;margin-bottom:9px;line-height:1.25}
+    .mp-upsell h3{font-size:24px;margin-bottom:9px;line-height:1.25}
     .mp-upsell p{color:#c3d2ea;font-size:14.5px;line-height:1.55}
     .mp-upsell .u-left .feat{margin-top:13px;font-size:13px;color:#a9c0e0}
     .mp-upsell .u-cta{position:relative;z-index:1;text-align:center}
     .mp-gate-form{display:flex;gap:8px;flex-wrap:wrap;justify-content:center;margin-top:6px}
-    .mp-gate-form input{border:1px solid rgba(255,255,255,.25);background:rgba(255,255,255,.09);color:#fff;font-family:inherit;font-size:15px;padding:15px 16px;border-radius:999px;outline:0;min-width:200px}
+    .mp-gate-form input{border:1px solid rgba(255,255,255,.25);background:rgba(255,255,255,.09);color:#fff;font-size:15px;padding:15px 16px;border-radius:999px;outline:0;min-width:200px}
     .mp-gate-form input::placeholder{color:#8ea6c9}
     .mp-gate-form input:focus{border-color:var(--orange);background:rgba(255,255,255,.15)}
     .mp-btn-unlock{background:linear-gradient(135deg,var(--orange),var(--orange-dark));color:#fff;border:0;cursor:pointer;font-weight:800;font-size:16px;padding:15px 26px;border-radius:999px;box-shadow:0 12px 28px rgba(255,140,26,.5);white-space:nowrap}
@@ -282,10 +277,10 @@
     .mp-gm-card{background:#fff;border-radius:26px;max-width:450px;width:100%;padding:38px 34px;text-align:center;box-shadow:var(--shadow-lg);animation:mp-rise .35s ease both;position:relative}
     .mp-gm-card .x{position:absolute;top:15px;right:18px;color:var(--muted);font-size:24px;cursor:pointer;line-height:1;background:none;border:0}
     .mp-gm-badge{width:58px;height:58px;border-radius:17px;background:linear-gradient(135deg,var(--orange),var(--orange-dark));color:#fff;display:flex;align-items:center;justify-content:center;margin:0 auto 16px;box-shadow:0 10px 22px rgba(255,140,26,.4)}
-    .mp-gm-card h3{font-family:'Poppins';font-size:23px;color:var(--navy-800);margin-bottom:8px}
+    .mp-gm-card h3{font-size:23px;color:var(--navy-800);margin-bottom:8px}
     .mp-gm-card p{color:var(--slate);font-size:14.5px;line-height:1.55;margin-bottom:20px}
     .mp-gm-form{display:flex;flex-direction:column;gap:10px}
-    .mp-gm-form input{border:1.5px solid var(--line);font-family:inherit;font-size:15px;padding:15px 16px;border-radius:12px;outline:0}
+    .mp-gm-form input{border:1.5px solid var(--line);font-size:15px;padding:15px 16px;border-radius:12px;outline:0}
     .mp-gm-form input:focus{border-color:var(--orange)}
     .mp-gm-form button{background:linear-gradient(135deg,var(--orange),var(--orange-dark));color:#fff;border:0;cursor:pointer;font-weight:800;font-size:16px;padding:16px;border-radius:12px;box-shadow:0 10px 24px rgba(255,140,26,.42)}
     .mp-gm-fine{font-size:12px;color:var(--muted);margin-top:12px}
@@ -296,6 +291,10 @@
     .mp-footer .f-brand img{width:20px;height:20px;border-radius:5px}
     @media(max-width:860px){.mp-grid{grid-template-columns:1fr 1fr}.mp-btn-scan span.txt{display:none}.mp-btn-scan{padding:15px 20px}}
     @media(max-width:560px){.mp-topbar{padding:14px 18px}.mp-grid{grid-template-columns:1fr}.mp-overall{flex-direction:column}.mp-upsell{flex-direction:column;text-align:center}.mp-trust .logos{gap:20px}.mp-acc-body{padding-left:18px}.mp-stat{min-width:100px;padding:14px}}
+    .mp-acc-summary .meta .d{margin-left:10px}
+    .mp-acc-row{max-width:700px;margin:10px auto}
+    .mp-upsell p{color:#c3d2ea!important}
+    .mp-score-ring .lbl{margin-top:-3px}
   </style>
 
   <main class="mp-main">

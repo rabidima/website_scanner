@@ -74,19 +74,21 @@
       { id: "gemini", name: "Gemini", desc: "Live AI answers", color: "#8E75B2", filled: true, icon: "M11.04 19.32Q12 21.51 12 24q0-2.49.93-4.68.96-2.19 2.58-3.81t3.81-2.55Q21.51 12 24 12q-2.49 0-4.68-.93a12.3 12.3 0 0 1-3.81-2.58 12.3 12.3 0 0 1-2.58-3.81Q12 2.49 12 0q0 2.49-.96 4.68-.93 2.19-2.55 3.81a12.3 12.3 0 0 1-3.81 2.58Q2.49 12 0 12q2.49 0 4.68.96 2.19.93 3.81 2.55t2.55 3.81" },
       { id: "perplexity", name: "Perplexity", desc: "Citations and sources", color: "#1FB8CD", filled: true, icon: "M22.3977 7.0896h-2.3106V.0676l-7.5094 6.3542V.1577h-1.1554v6.1966L4.4904 0v7.0896H1.6023v10.3976h2.8882V24l6.932-6.3591v6.2005h1.1554v-6.0469l6.9318 6.1807v-6.4879h2.8882V7.0896zm-3.4657-4.531v4.531h-5.355l5.355-4.531zm-13.2862.0676 4.8691 4.4634H5.6458V2.6262zM2.7576 16.332V8.245h7.8476l-6.1149 6.1147v1.9723H2.7576zm2.8882 5.0404v-3.8852h.0001v-2.6488l5.7763-5.7764v7.0111l-5.7764 5.2993zm12.7086.0248-5.7766-5.1509V9.0618l5.7766 5.7766v6.5588zm2.8882-5.0652h-1.733v-1.9723L13.3948 8.245h7.8478v8.087z" }
     ];
+    // Order here drives the results accordion's row order — Core Web Vitals
+    // sits last, after Tech stack.
     var BONUS_CHECKS = [
       { id: "seo", name: "Google ranking", desc: "Where you rank and top keywords", icon: "M3 3v18h18|M8 17V9M12 17V5M16 17v-6" },
-      { id: "cwv", name: "Core Web Vitals", desc: "Speed and mobile experience", icon: "M22 12h-4l-3 9L9 3l-3 9H2" },
-      { id: "techstack", name: "Tech stack", desc: "What powers the site", icon: "M16 18l6-6-6-6M8 6l-6 6 6 6" }
+      { id: "techstack", name: "Tech stack", desc: "What powers the site", icon: "M16 18l6-6-6-6M8 6l-6 6 6 6" },
+      { id: "cwv", name: "Core Web Vitals", desc: "Speed and mobile experience", icon: "M22 12h-4l-3 9L9 3l-3 9H2" }
     ];
-    // Core Web Vitals no longer runs automatically as part of the scan (the
+    // Core Web Vitals doesn't run automatically as part of the scan (the
     // PageSpeed/Lighthouse audit is consistently the slowest of the checks,
-    // and not everyone needs it every time) — it's opt-in via a "Run check"
-    // button instead, which appears in two places sharing the same
-    // underlying fetch: the scanning overlay (lets it run in parallel with
-    // the rest of the scan — see the `runnable` flag on its stepRow and
-    // runCwvFromOverlay below) and the results accordion (lets it run after
-    // the fact if it wasn't started earlier — see buildCwvRow/runCwvCheck).
+    // and not everyone needs it every time), and it doesn't appear in the
+    // scanning overlay at all — it's opt-in only from its "Run check" button
+    // on the results accordion, once the rest of the scan is done. See
+    // buildCwvRow/runCwvCheck below. AUTO_BONUS_CHECKS is what actually runs
+    // (and what the overlay's step list shows) during the automatic scan.
+    var AUTO_BONUS_CHECKS = BONUS_CHECKS.filter(function (c) { return c.id !== "cwv"; });
     // AI_PROVIDERS (frontend display ids used by the scanning overlay) use
     // short brand names; lib/ai-visibility.ts's ProviderResult.provider field
     // uses the actual API/company names ("openai" for ChatGPT, "anthropic"
@@ -111,6 +113,46 @@
       var attrs = filled ? 'fill="currentColor"' : 'fill="none" stroke="currentColor" stroke-width="2"';
       return '<svg width="' + w + '" height="' + h + '" viewBox="0 0 24 24" ' + attrs + '>' +
         icon.split("|").map(function (d) { return '<path d="' + d + '"/>'; }).join("") + "</svg>";
+    }
+
+    // Google ranking / Core Web Vitals / Tech stack use pre-built artwork
+    // (your supplied SVGs) instead of this file's usual single-path-string
+    // convention — each has its own viewBox and, for seo/cwv, its own
+    // hard-coded per-element fill colors that shouldn't be touched (Google's
+    // real 4-color "G", the Core Web Vitals gauge's own palette). Tech
+    // stack's source had a flat #000000 fill; that's swapped for
+    // currentColor here so it still tints with this file's usual orange
+    // bonus-check accent instead of rendering flat black. Keyed by the same
+    // `id` used everywhere else (seo/cwv/techstack) so stepRow/accRow/chips
+    // can opt a row into this rendering path with one lookup.
+    var ICON_DEFS = {
+      seo: {
+        viewBox: "0 0 24 24",
+        markup: '<path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>' +
+          '<path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>' +
+          '<path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>' +
+          '<path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>'
+      },
+      cwv: {
+        viewBox: "0 0 512 520.331",
+        markup: '<g fill="none" fill-rule="evenodd">' +
+          '<path d="M0 106.667h512v320H0z" fill="#def"/>' +
+          '<path d="M512 106.667H0V42.56C0 19.055 19.137 0 42.772 0h426.456C492.85 0 512 19.032 512 42.56z" fill="#bdf"/>' +
+          '<path d="M128 74.667c-11.782 0-21.333-9.552-21.333-21.334S116.217 32 128 32s21.333 9.551 21.333 21.333c0 11.782-9.55 21.334-21.333 21.334zm-74.667 0C41.551 74.667 32 65.115 32 53.333S41.551 32 53.333 32c11.782 0 21.334 9.551 21.334 21.333 0 11.782-9.552 21.334-21.334 21.334z" fill="#fff"/>' +
+          '<path d="M85.333 426.667H0c0-65.516 24.994-131.033 74.98-181.02 99.975-99.974 262.065-99.974 362.04 0l-60.34 60.34C345.795 275.103 303.128 256 256 256c-94.257 0-170.667 76.41-170.667 170.667z" fill="#06f"/>' +
+          '<path d="M426.667 426.667H512c0-65.516-24.994-131.033-74.98-181.02l-60.34 60.34c30.884 30.885 49.987 73.551 49.987 120.68z" fill="#c6f"/>' +
+          '<path d="M195.66 487.006c-33.325-33.324-33.325-87.354 0-120.68 33.325-33.324 218.732-98.051 218.732-98.051s-64.727 185.407-98.052 218.731c-33.325 33.325-87.355 33.325-120.68 0z" fill="#6cf"/>' +
+          '<path d="M256 469.333c-23.564 0-42.667-19.102-42.667-42.666C213.333 403.103 232.436 384 256 384s42.667 19.103 42.667 42.667-19.103 42.666-42.667 42.666z" fill="#06f"/>' +
+          '</g>'
+      },
+      techstack: {
+        viewBox: "0 0 490 490",
+        markup: '<path d="M245.221,348.125c-56.477,0-102.424-46.162-102.424-102.903s45.947-102.904,102.424-102.904c56.476,0,102.424,46.163,102.424,102.904S301.698,348.125,245.221,348.125z M245.221,162.318c-45.449,0-82.424,37.19-82.424,82.904c0,45.713,36.975,82.903,82.424,82.903c45.449,0,82.424-37.19,82.424-82.903C327.645,199.508,290.67,162.318,245.221,162.318z"/>' +
+          '<path d="M257.532,490h-0.001h-25.06c-24.58,0-44.579-20.078-44.58-44.758v-39.457c-5.296-1.908-10.519-4.091-15.625-6.532l-27.732,27.875c-8.42,8.466-19.62,13.128-31.536,13.128c-11.915,0.001-23.117-4.66-31.539-13.125l-17.721-17.814c-17.349-17.436-17.35-45.814-0.002-63.259l27.782-27.924c-2.442-5.154-4.627-10.43-6.534-15.782l-39.196-0.002c-11.919,0-23.117-4.661-31.537-13.125c-8.407-8.448-13.038-19.682-13.038-31.628v-25.192c0-24.675,19.996-44.753,44.574-44.758h39.199c1.908-5.354,4.092-10.629,6.532-15.781l-27.779-27.923c-8.407-8.449-13.039-19.683-13.039-31.629c0-11.944,4.63-23.178,13.037-31.629l17.722-17.813c8.411-8.455,19.612-13.111,31.54-13.111c11.926,0,23.126,4.655,31.538,13.109l27.733,27.876c5.104-2.439,10.327-4.623,15.624-6.53V44.757C187.892,20.078,207.889,0,232.469,0h25.06c24.581,0,44.579,20.078,44.579,44.757v39.459c5.297,1.908,10.52,4.092,15.624,6.532l27.733-27.876c8.414-8.466,19.615-13.13,31.535-13.13c11.918,0,23.12,4.663,31.542,13.131l17.718,17.806c17.349,17.438,17.35,45.817,0.004,63.262l-27.785,27.929c2.429,5.135,4.607,10.407,6.518,15.778l39.216,0.003c11.924,0,23.119,4.661,31.536,13.125c8.407,8.449,13.037,19.683,13.037,31.629l0.002,25.188c0,24.675-19.996,44.754-44.575,44.76h-39.215c-1.911,5.37-4.089,10.643-6.518,15.779l27.783,27.928c8.407,8.448,13.038,19.681,13.038,31.626c0,11.944-4.629,23.177-13.035,31.629l-17.723,17.814c-8.409,8.454-19.61,13.11-31.541,13.11c-11.927,0-23.127-4.655-31.539-13.108l-27.733-27.877c-5.105,2.441-10.327,4.624-15.622,6.53l-0.003,39.462c0.004,11.939-4.625,23.172-13.035,31.626C280.648,485.337,269.449,489.999,257.532,490z M170.307,377.165c1.595,0,3.201,0.383,4.678,1.17c8.275,4.411,16.958,8.042,25.81,10.792c4.162,1.293,6.998,5.144,6.998,9.502v46.613c0.001,13.706,11.071,24.856,24.679,24.856h25.059c6.582,0,12.772-2.579,17.431-7.263c4.672-4.697,7.245-10.943,7.243-17.588l0.003-46.621c0.001-4.358,2.836-8.209,6.999-9.502c8.849-2.749,17.531-6.379,25.803-10.789c3.873-2.063,8.64-1.349,11.736,1.763l32.826,32.995c4.647,4.671,10.838,7.244,17.43,7.244c6.594,0,12.785-2.573,17.432-7.244l17.722-17.814c4.671-4.697,7.244-10.946,7.244-17.595c0-6.648-2.573-12.895-7.245-17.59l-32.825-32.996c-3.07-3.086-3.778-7.81-1.747-11.66c4.353-8.251,7.961-16.986,10.726-25.966c1.285-4.174,5.143-7.021,9.51-7.021h46.393c13.606-0.003,24.677-11.155,24.677-24.859l-0.002-25.186c0-6.65-2.573-12.899-7.246-17.596c-4.655-4.681-10.838-7.258-17.412-7.258l-46.411-0.004c-4.367-0.001-8.223-2.849-9.509-7.021c-2.765-8.979-6.374-17.715-10.726-25.964c-2.032-3.851-1.324-8.575,1.747-11.661l32.825-32.995c9.649-9.703,9.649-25.491-0.001-35.191l-17.719-17.806c-4.661-4.687-10.852-7.266-17.433-7.266c-6.582,0-12.77,2.579-17.423,7.261l-32.831,32.999c-3.096,3.111-7.865,3.826-11.737,1.762c-8.267-4.408-16.95-8.039-25.806-10.792c-4.162-1.293-6.998-5.144-6.998-9.502V44.757c0-13.705-11.07-24.855-24.678-24.855h-25.06c-13.606,0-24.676,11.15-24.676,24.855v46.614c0,4.358-2.836,8.209-6.998,9.503c-8.856,2.751-17.539,6.382-25.808,10.79c-3.873,2.063-8.64,1.349-11.735-1.763l-32.825-32.995c-4.647-4.671-10.837-7.244-17.429-7.244c-6.592,0-12.783,2.573-17.432,7.246L77.845,94.72c-4.672,4.696-7.245,10.944-7.245,17.594c0.001,6.648,2.574,12.896,7.246,17.592L110.67,162.9c3.071,3.087,3.778,7.811,1.746,11.662c-4.384,8.306-7.998,17.04-10.743,25.961c-1.284,4.175-5.142,7.024-9.51,7.024H45.788c-13.605,0.003-24.675,11.153-24.675,24.856v25.192c0,6.649,2.573,12.896,7.245,17.592c4.659,4.682,10.846,7.261,17.422,7.261l46.383,0.002c4.368,0,8.226,2.85,9.51,7.024c2.742,8.912,6.356,17.647,10.744,25.962c2.032,3.851,1.324,8.575-1.747,11.662l-32.824,32.993c-9.649,9.702-9.65,25.489,0.001,35.188l17.72,17.814c4.659,4.683,10.85,7.261,17.431,7.261c6.581,0,12.77-2.579,17.427-7.262l32.826-32.995C165.165,378.173,167.72,377.165,170.307,377.165z" fill="currentColor"/>'
+      }
+    };
+    function rawIconSvg(def, w, h) {
+      return '<svg width="' + w + '" height="' + h + '" viewBox="' + def.viewBox + '" fill="currentColor">' + def.markup + "</svg>";
     }
 
     var widget = document.getElementById("mpWidget");
@@ -148,21 +190,19 @@
     var subline = document.getElementById("mpSubline");
 
     document.getElementById("mpChips").innerHTML = CATALOG.map(function (s) {
-      return '<div class="mp-chip">' + iconSvg(s.icon, 15, 15) + s.name + "</div>";
+      var icon = ICON_DEFS[s.id] ? rawIconSvg(ICON_DEFS[s.id], 15, 15) : iconSvg(s.icon, 15, 15);
+      return '<div class="mp-chip">' + icon + s.name + "</div>";
     }).join("");
 
     // Both the AI-provider rows and the bonus-check rows share the same
     // row markup (icon, title+description, status badge) — only which
     // container they render into, and how their state gets driven, differs.
-    // `runnable` adds a "Run check" button to the status area in place of
-    // the auto-spinning radar — used for the overlay's Core Web Vitals row,
-    // which doesn't start until clicked (see runCwvFromOverlay below).
     function stepRow(s) {
-      return '<div class="mp-step2' + (s.runnable ? ' runnable' : '') + '" data-id="' + s.id + '">' +
-        '<div class="ic" style="background:' + s.color_bg + ';color:' + s.color + '">' + iconSvg(s.icon, 17, 17, s.filled) + '</div>' +
+      var icon = ICON_DEFS[s.id] ? rawIconSvg(ICON_DEFS[s.id], 17, 17) : iconSvg(s.icon, 17, 17, s.filled);
+      return '<div class="mp-step2" data-id="' + s.id + '">' +
+        '<div class="ic" style="background:' + s.color_bg + ';color:' + s.color + '">' + icon + '</div>' +
         '<div class="meta"><div class="t">' + s.name + '</div><div class="d">' + s.desc + '</div></div>' +
         '<div class="status">' +
-          (s.runnable ? '<button type="button" class="run">Run check</button>' : '') +
           '<span class="mp-mini-radar"><span class="r"></span><span class="s"></span><span class="c"></span></span>' +
           '<span class="txt">Done</span><span class="txt-fail">Failed</span><span class="check">✓</span><span class="cross">✕</span>' +
         '</div></div>';
@@ -180,56 +220,12 @@
       aiStepEls[el.getAttribute("data-id")] = el;
     });
 
-    bonusStepsEl.innerHTML = BONUS_CHECKS.map(function (s) {
-      return stepRow({ id: s.id, name: s.name, desc: s.desc, icon: s.icon, color: "#FF8C1A", color_bg: "rgba(255,140,26,.14)", runnable: s.id === "cwv" });
+    bonusStepsEl.innerHTML = AUTO_BONUS_CHECKS.map(function (s) {
+      return stepRow({ id: s.id, name: s.name, desc: s.desc, icon: s.icon, color: "#FF8C1A", color_bg: "rgba(255,140,26,.14)" });
     }).join("");
     var stepEls = {};
     Array.prototype.forEach.call(bonusStepsEl.querySelectorAll(".mp-step2"), function (el) {
       stepEls[el.getAttribute("data-id")] = el;
-    });
-
-    // Core Web Vitals in the overlay: fires the same /api/pagespeed call the
-    // results-accordion button does, but lets it start as soon as the user
-    // clicks it — in parallel with the rest of the scan — rather than only
-    // after results render. Writes into activeScanResults (the current
-    // scan's results4 object) so if it finishes before showResults() runs,
-    // the accordion shows the real grade immediately instead of its own
-    // "not run yet" button; if it's still running or never started, the
-    // accordion's own Run check button still works exactly as before.
-    function runCwvFromOverlay() {
-      var host = activeScanHost;
-      var results4 = activeScanResults;
-      var el = stepEls.cwv;
-      if (!host || !results4 || !el || el.classList.contains("active")) return;
-      setStep("cwv", "active");
-      fetch(API_BASE + "/api/pagespeed", {
-        method: "POST",
-        headers: Object.assign({ "Content-Type": "application/json" }, authHeaders()),
-        body: JSON.stringify({ url: "https://" + host, strategy: "mobile" })
-      })
-        .then(function (res) { return res.json().then(function (data) { return { ok: res.ok, data: data }; }); })
-        .then(function (r) {
-          if (!r.ok && r.data && r.data.error === "gate") {
-            // Reset to idle rather than popping the unlock modal mid-scan —
-            // that would yank the user out of the main scan for a bonus
-            // check. They can unlock via the results accordion's own Run
-            // check button instead, once the main scan finishes.
-            el.classList.remove("active", "done", "failed");
-            return;
-          }
-          results4.cwv = r;
-          setStep("cwv", r.ok ? "done" : "failed");
-        })
-        .catch(function () {
-          results4.cwv = { ok: false, data: { error: "Network error." } };
-          setStep("cwv", "failed");
-        });
-    }
-    bonusStepsEl.addEventListener("click", function (e) {
-      var btn = e.target.closest && e.target.closest(".run");
-      if (!btn) return;
-      var row = btn.closest(".mp-step2");
-      if (row && row.getAttribute("data-id") === "cwv") runCwvFromOverlay();
     });
 
     function normalizeUrl(v) {
@@ -280,12 +276,6 @@
     var streamTimer = null;
     var ringTimer = null; // scan-progress ring's simulated-crawl interval
     var aiTimers = []; // AI-provider rows' decorative 2s-spin setTimeouts
-    // The current (or most recently started) scan's host + results4 object,
-    // so the overlay's on-demand Core Web Vitals button — which is bound
-    // once at page load, not per-scan — knows what to check and where to
-    // write the result. See runCwvFromOverlay above.
-    var activeScanHost = null;
-    var activeScanResults = null;
 
     // Stops every scan-in-progress timer. Needed on cancel/home-navigation
     // so a stale timer from an abandoned scan doesn't fire later and flip a
@@ -505,9 +495,10 @@
     function accRow(id, icon, iconBg, iconColor, name, desc, badgeCls, badgeLabel, bodyHtml, filled) {
       var row = document.createElement("div");
       row.className = "mp-acc-row";
+      var iconHtml = ICON_DEFS[id] ? rawIconSvg(ICON_DEFS[id], 18, 18) : iconSvg(icon, 18, 18, filled);
       row.innerHTML =
         '<button class="mp-acc-summary" type="button" aria-expanded="false">' +
-          '<span class="ic" style="background:' + iconBg + ';color:' + iconColor + '">' + iconSvg(icon, 18, 18, filled) + '</span>' +
+          '<span class="ic" style="background:' + iconBg + ';color:' + iconColor + '">' + iconHtml + '</span>' +
           '<span class="meta"><span class="t">' + name + '</span><span class="d">' + desc + '</span></span>' +
           '<span class="mp-badge ' + badgeCls + '">' + badgeLabel + '</span>' +
           '<span class="mp-acc-chev">' + iconSvg("m6 9 6 6 6-6", 16, 16) + '</span>' +
@@ -668,15 +659,7 @@
 
     function startScan(host) {
       setState("scanning");
-      // Every bonus check starts "active" (spinning) EXCEPT Core Web Vitals,
-      // which is opt-in — it stays in its idle "Run check" state (see the
-      // runnable flag on its stepRow) until the button is clicked, either
-      // here or later on the results accordion. Also resets it back to idle
-      // on a fresh scan, in case a previous scan on this page already ran it.
-      Object.keys(stepEls).forEach(function (id) {
-        if (id === "cwv") { stepEls[id].classList.remove("active", "done", "failed"); return; }
-        setStep(id, "active");
-      });
+      Object.keys(stepEls).forEach(function (id) { setStep(id, "active"); });
       Object.keys(aiStepEls).forEach(function (id) { setAiStep(id, "pending"); });
       overlay.classList.add("show");
       stream.textContent = "> verifying " + host + "…";
@@ -694,8 +677,6 @@
       var results4 = {};
       var gated = false;
       var scanPass = null;
-      activeScanHost = host;
-      activeScanResults = results4;
 
       function call(path, body, id, extraHeaders) {
         return fetch(API_BASE + path, {
@@ -893,15 +874,13 @@
       });
 
       // ---- "Bonus checks" accordion — the 3 non-AI real checks ----
-      // Core Web Vitals doesn't run automatically — if it was already
-      // started (and maybe finished) via the overlay's Run check button,
-      // results4.cwv is populated and it renders as a normal graded row
-      // like the other two. Otherwise it renders its own "not run yet" Run
-      // check button (buildCwvRow), same as if it'd never been touched.
+      // Core Web Vitals never runs automatically — its row always renders
+      // via buildCwvRow's "not run yet" Run check button (BONUS_CHECKS'
+      // order puts it last, after Tech stack).
       bonusAccordion.innerHTML = "";
       BONUS_CHECKS.forEach(function (c, i) {
         var row;
-        if (c.id === "cwv" && !results4.cwv) {
+        if (c.id === "cwv") {
           row = buildCwvRow(host, c);
         } else {
           var graded = gradeOf(c.id);
