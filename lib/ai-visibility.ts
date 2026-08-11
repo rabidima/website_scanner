@@ -206,7 +206,21 @@ async function queryOpenAi(prompt: string, apiKey: string): Promise<RawQueryResu
     // GPT-5-family models reject the legacy `max_tokens` param and require
     // `max_completion_tokens` instead — this only applies to OpenAI's Chat
     // Completions endpoint, the other three providers are unaffected.
-    body: JSON.stringify({ model, messages: [{ role: "user", content: prompt }], max_completion_tokens: 500 }),
+    //
+    // reasoning_effort: "minimal" is the same fix as Gemini's thinkingBudget:0
+    // below — GPT-5-family models spend part of max_completion_tokens on
+    // hidden reasoning before writing the visible answer. At the default
+    // effort level, a 500-token budget for a short "is this brand legit"
+    // question can get mostly consumed by reasoning, leaving little or
+    // nothing for the actual reply — which reads as "didn't mention the
+    // business" for every single site, since there's barely any text left to
+    // search. Forcing minimal effort keeps the budget going to the answer.
+    body: JSON.stringify({
+      model,
+      messages: [{ role: "user", content: prompt }],
+      max_completion_tokens: 500,
+      reasoning_effort: "minimal",
+    }),
   });
   if (!res.ok) throw new Error(await describeApiError(res, "OpenAI"));
   const data = await res.json();
@@ -292,7 +306,12 @@ async function runProvider(
     const { text, citations } = await PROVIDER_QUERIES[provider](prompt, apiKey);
     const { mentioned, snippet, matchIndex } = findMention(text, domain, brand);
     if (!mentioned) {
-      return { provider, configured: true, mentioned: false, snippet: null, fullResponse: null, citedUrl: null, sentiment: null, error: null };
+      // Still surfaces the raw reply even on a miss (capped the same as a
+      // mention would be) — an empty/near-empty string here is the tell for
+      // a token-budget problem (e.g. reasoning tokens crowding out the
+      // answer) rather than the model genuinely having nothing to say.
+      const fullResponse = text ? (text.length > MAX_FULL_RESPONSE_CHARS ? text.slice(0, MAX_FULL_RESPONSE_CHARS) + "…" : text) : null;
+      return { provider, configured: true, mentioned: false, snippet: null, fullResponse, citedUrl: null, sentiment: null, error: null };
     }
     const sentiment = scoreSentiment(text, matchIndex === -1 ? 0 : matchIndex);
     const allUrls = citations.length > 0 ? citations : extractUrls(text);

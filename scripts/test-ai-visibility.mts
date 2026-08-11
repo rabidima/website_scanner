@@ -55,6 +55,11 @@ async function run() {
   check("fullResponse carries the entire reply, not just the matched sentence", openaiResult.fullResponse === openaiMultiSentence, openaiResult.fullResponse ?? "null");
   check("snippet still holds just the one matched sentence (short preview)", (openaiResult.snippet ?? "").length < openaiMultiSentence.length, openaiResult.snippet ?? "null");
   check("Detects no mention from Anthropic", anthropicResult.mentioned === false, JSON.stringify(anthropicResult));
+  check(
+    "Raw reply is still surfaced on a miss, not just null — this is the debug signal for a token-starved answer",
+    anthropicResult.fullResponse === "I don't have a specific recommendation.",
+    anthropicResult.fullResponse ?? "null"
+  );
   check("Mention rate reflects 1/1 for openai, 0/1 for anthropic", mixed.mentionRates.find((r) => r.provider === "openai")!.mentionedCount === 1 && mixed.mentionRates.find((r) => r.provider === "anthropic")!.mentionedCount === 0);
 
   // Case 3: Perplexity's structured citations field is used directly rather
@@ -176,6 +181,41 @@ async function run() {
     capturedGeminiBody?.generationConfig?.thinkingConfig?.thinkingBudget === 0,
     JSON.stringify(capturedGeminiBody)
   );
+
+  // Case 10: GPT-5-family models spend part of max_completion_tokens on
+  // hidden reasoning before the visible answer — same class of bug as
+  // Gemini's thinkingConfig above, just OpenAI's version of the knob.
+  // reasoning_effort: "minimal" keeps that budget going to the actual reply
+  // instead of being silently eaten, which is what was producing "didn't
+  // mention the business" for every site regardless of how well-known it is.
+  let capturedOpenAiBody2: any = null;
+  mockFetch(async (url: string, init: any) => {
+    if (url.includes("api.openai.com")) {
+      capturedOpenAiBody2 = JSON.parse(init.body);
+      return new Response(JSON.stringify({ choices: [{ message: { content: "no mention here" } }] }), { status: 200 });
+    }
+    throw new Error("unexpected provider call: " + url);
+  });
+  await runAiVisibilityCheck("acmecandles.com", ["any prompt"], { openai: "sk-test" });
+  check(
+    "OpenAI request sets reasoning_effort: minimal so the token budget goes to the visible answer",
+    capturedOpenAiBody2?.reasoning_effort === "minimal",
+    JSON.stringify(capturedOpenAiBody2)
+  );
+
+  // Case 11: an empty/whitespace-only reply (the worst case of the token-
+  // starvation bug — reasoning ate 100% of the budget) reports fullResponse
+  // as null rather than an empty string, so the UI's "what it said instead"
+  // line doesn't render an empty, confusing paragraph.
+  mockFetch(async (url: string) => {
+    if (url.includes("api.openai.com")) {
+      return new Response(JSON.stringify({ choices: [{ message: { content: "" } }] }), { status: 200 });
+    }
+    throw new Error("unexpected provider call: " + url);
+  });
+  const emptyReply = await runAiVisibilityCheck("acmecandles.com", ["any prompt"], { openai: "sk-test" });
+  const emptyResult = emptyReply.promptResults[0].results.find((r) => r.provider === "openai")!;
+  check("An empty reply reports fullResponse as null, not an empty string", emptyResult.fullResponse === null && emptyResult.mentioned === false, JSON.stringify(emptyResult));
 
   global.fetch = realFetch;
 

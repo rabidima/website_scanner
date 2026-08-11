@@ -221,7 +221,7 @@
     });
 
     bonusStepsEl.innerHTML = AUTO_BONUS_CHECKS.map(function (s) {
-      return stepRow({ id: s.id, name: s.name, desc: s.desc, icon: s.icon, color: "#FF8C1A", color_bg: "rgba(255,140,26,.14)" });
+      return stepRow({ id: s.id, name: s.name, desc: s.desc, icon: s.icon, color: "#FF8C1A", color_bg: "rgba(55,63,71,.04)" });
     }).join("");
     var stepEls = {};
     Array.prototype.forEach.call(bonusStepsEl.querySelectorAll(".mp-step2"), function (el) {
@@ -511,7 +511,7 @@
     // pre-populated result, since nothing was fetched for it during the scan.
     function buildCwvRow(host, c) {
       var row = accRow(
-        c.id, c.icon, "rgba(255,140,26,.14)", "#FF8C1A", c.name, c.desc,
+        c.id, c.icon, "rgba(55,63,71,.04)", "#FF8C1A", c.name, c.desc,
         "mp-badge-run", "Run check",
         "<p>Not run yet — click “Run check” above to test page speed and Core Web Vitals on mobile.</p>"
       );
@@ -616,7 +616,10 @@
       if (callFailedMsg) return "<p>" + escapeHtml(callFailedMsg) + "</p>";
       if (!pr || !pr.configured) return "<p>This provider isn't configured on the backend yet.</p>";
       if (pr.error) return "<p>" + escapeHtml(pr.error) + "</p>";
-      if (!pr.mentioned) return "<p>Didn't mention this business for the prompt we asked.</p>";
+      if (!pr.mentioned) {
+        return "<p>Didn't mention this business for the prompt we asked.</p>" +
+          (pr.fullResponse ? '<p class="src">What it said instead: ' + escapeHtml(pr.fullResponse) + "</p>" : "");
+      }
       var body = "<p>" + escapeHtml(pr.fullResponse || pr.snippet || "") + "</p>";
       if (pr.citedUrl) body += '<p class="src">Source: <a href="' + escapeHtml(pr.citedUrl) + '" target="_blank" rel="noopener noreferrer">' + escapeHtml(pr.citedUrl) + "</a></p>";
       return body;
@@ -886,7 +889,7 @@
           var graded = gradeOf(c.id);
           var badge = bonusBadge(c.id, graded);
           var bodyHtml = "<p><b>" + escapeHtml(graded.head) + ".</b> " + escapeHtml(graded.body) + "</p>";
-          row = accRow(c.id, c.icon, "rgba(255,140,26,.14)", "#FF8C1A", c.name, c.desc, badge.cls, badge.label, bodyHtml);
+          row = accRow(c.id, c.icon, "rgba(55,63,71,.04)", "#FF8C1A", c.name, c.desc, badge.cls, badge.label, bodyHtml);
         }
         row.style.animationDelay = ((AI_PROVIDERS.length + i) * 55) + "ms";
         bonusAccordion.appendChild(row);
