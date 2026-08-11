@@ -49,10 +49,21 @@
   Google ranking / AI visibility never fire (no point burning those calls, or
   this visitor's free scan, on a domain that doesn't resolve). Only once tech
   stack succeeds do ranking + AI visibility run together. Core Web Vitals
-  (the PageSpeed/Lighthouse audit — consistently the slowest check) no longer
-  runs automatically at all: its row in the results accordion starts in a
-  "Run check" state and only fires /api/pagespeed when that button is
-  clicked, independently of the rest of the scan.
+  (the PageSpeed/Lighthouse audit — consistently the slowest check) never
+  runs automatically: it's opt-in via a "Run check" button that appears in
+  two places sharing the same /api/pagespeed call — the scanning overlay
+  (lets it start in parallel with the rest of the scan) and the results
+  accordion (lets it start after the fact if it wasn't run earlier). If it
+  finishes in the overlay before the main scan does, the accordion shows the
+  real grade immediately instead of its own button.
+
+  AI-visibility prompt: "Is {website}.com legit and trustworthy?" — uses the
+  full domain (not a stripped/derived keyword), both because it reads more
+  naturally and because the model's answer very likely echoes the literal
+  domain back, which lib/ai-visibility.ts's mention-detector checks for
+  directly on top of the normalized brand name — this measurably improves
+  detection accuracy for domains where the brand name and the domain slug
+  don't match cleanly (e.g. "pyleusa.com" vs. the brand "Pyle").
 
   Free-scan / email gate: first scan (per IP, resets every 24h) runs with no
   email. Any scan after that gets a 403 with {error:"gate"} — this page
@@ -186,6 +197,12 @@
     .mp-step2.failed .status .cross{display:inline-flex}
     .mp-step2.failed .status .txt-fail{display:inline}
     .mp-step2.done .status .mp-mini-radar,.mp-step2.failed .status .mp-mini-radar{display:none}
+    .mp-step2 .status .run{display:none;background:rgba(255,140,26,.22);color:#ffd9ad;font-family:inherit;font-size:11px;font-weight:700;padding:5px 12px;border-radius:999px;border:0;cursor:pointer;white-space:nowrap}
+    .mp-step2 .status .run:hover{background:rgba(255,140,26,.32)}
+    .mp-step2.runnable .status .run{display:inline-flex}
+    .mp-step2.runnable .status .mp-mini-radar{display:none}
+    .mp-step2.runnable.active .status .mp-mini-radar{display:flex}
+    .mp-step2.runnable.active .status .run,.mp-step2.done .status .run,.mp-step2.failed .status .run{display:none}
     .mp-cancel{margin-top:22px;background:none;border:0;color:rgba(255,255,255,.55);font-size:13px;cursor:pointer;text-decoration:underline}
     .mp-results{display:none;width:100%;max-width:1080px;margin:0 auto;text-align:left;animation:mp-rise .5s ease both}
     .mp-results.show{display:block}

@@ -81,13 +81,12 @@
     ];
     // Core Web Vitals no longer runs automatically as part of the scan (the
     // PageSpeed/Lighthouse audit is consistently the slowest of the checks,
-    // and not everyone needs it every time) — it now runs on demand from a
-    // "Run check" button on its row in the results accordion. The scanning
-    // overlay's step list only needs the checks that actually run during the
-    // automatic scan; BONUS_CHECKS itself stays the full list of 3 since the
-    // results accordion still shows a CWV row (just in a "not run yet" state
-    // until the button is clicked — see buildCwvRow/runCwvCheck below).
-    var AUTO_BONUS_CHECKS = BONUS_CHECKS.filter(function (c) { return c.id !== "cwv"; });
+    // and not everyone needs it every time) — it's opt-in via a "Run check"
+    // button instead, which appears in two places sharing the same
+    // underlying fetch: the scanning overlay (lets it run in parallel with
+    // the rest of the scan — see the `runnable` flag on its stepRow and
+    // runCwvFromOverlay below) and the results accordion (lets it run after
+    // the fact if it wasn't started earlier — see buildCwvRow/runCwvCheck).
     // AI_PROVIDERS (frontend display ids used by the scanning overlay) use
     // short brand names; lib/ai-visibility.ts's ProviderResult.provider field
     // uses the actual API/company names ("openai" for ChatGPT, "anthropic"
@@ -155,11 +154,15 @@
     // Both the AI-provider rows and the bonus-check rows share the same
     // row markup (icon, title+description, status badge) — only which
     // container they render into, and how their state gets driven, differs.
+    // `runnable` adds a "Run check" button to the status area in place of
+    // the auto-spinning radar — used for the overlay's Core Web Vitals row,
+    // which doesn't start until clicked (see runCwvFromOverlay below).
     function stepRow(s) {
-      return '<div class="mp-step2" data-id="' + s.id + '">' +
+      return '<div class="mp-step2' + (s.runnable ? ' runnable' : '') + '" data-id="' + s.id + '">' +
         '<div class="ic" style="background:' + s.color_bg + ';color:' + s.color + '">' + iconSvg(s.icon, 17, 17, s.filled) + '</div>' +
         '<div class="meta"><div class="t">' + s.name + '</div><div class="d">' + s.desc + '</div></div>' +
         '<div class="status">' +
+          (s.runnable ? '<button type="button" class="run">Run check</button>' : '') +
           '<span class="mp-mini-radar"><span class="r"></span><span class="s"></span><span class="c"></span></span>' +
           '<span class="txt">Done</span><span class="txt-fail">Failed</span><span class="check">✓</span><span class="cross">✕</span>' +
         '</div></div>';
@@ -177,12 +180,56 @@
       aiStepEls[el.getAttribute("data-id")] = el;
     });
 
-    bonusStepsEl.innerHTML = AUTO_BONUS_CHECKS.map(function (s) {
-      return stepRow({ id: s.id, name: s.name, desc: s.desc, icon: s.icon, color: "#FF8C1A", color_bg: "rgba(255,140,26,.14)" });
+    bonusStepsEl.innerHTML = BONUS_CHECKS.map(function (s) {
+      return stepRow({ id: s.id, name: s.name, desc: s.desc, icon: s.icon, color: "#FF8C1A", color_bg: "rgba(255,140,26,.14)", runnable: s.id === "cwv" });
     }).join("");
     var stepEls = {};
     Array.prototype.forEach.call(bonusStepsEl.querySelectorAll(".mp-step2"), function (el) {
       stepEls[el.getAttribute("data-id")] = el;
+    });
+
+    // Core Web Vitals in the overlay: fires the same /api/pagespeed call the
+    // results-accordion button does, but lets it start as soon as the user
+    // clicks it — in parallel with the rest of the scan — rather than only
+    // after results render. Writes into activeScanResults (the current
+    // scan's results4 object) so if it finishes before showResults() runs,
+    // the accordion shows the real grade immediately instead of its own
+    // "not run yet" button; if it's still running or never started, the
+    // accordion's own Run check button still works exactly as before.
+    function runCwvFromOverlay() {
+      var host = activeScanHost;
+      var results4 = activeScanResults;
+      var el = stepEls.cwv;
+      if (!host || !results4 || !el || el.classList.contains("active")) return;
+      setStep("cwv", "active");
+      fetch(API_BASE + "/api/pagespeed", {
+        method: "POST",
+        headers: Object.assign({ "Content-Type": "application/json" }, authHeaders()),
+        body: JSON.stringify({ url: "https://" + host, strategy: "mobile" })
+      })
+        .then(function (res) { return res.json().then(function (data) { return { ok: res.ok, data: data }; }); })
+        .then(function (r) {
+          if (!r.ok && r.data && r.data.error === "gate") {
+            // Reset to idle rather than popping the unlock modal mid-scan —
+            // that would yank the user out of the main scan for a bonus
+            // check. They can unlock via the results accordion's own Run
+            // check button instead, once the main scan finishes.
+            el.classList.remove("active", "done", "failed");
+            return;
+          }
+          results4.cwv = r;
+          setStep("cwv", r.ok ? "done" : "failed");
+        })
+        .catch(function () {
+          results4.cwv = { ok: false, data: { error: "Network error." } };
+          setStep("cwv", "failed");
+        });
+    }
+    bonusStepsEl.addEventListener("click", function (e) {
+      var btn = e.target.closest && e.target.closest(".run");
+      if (!btn) return;
+      var row = btn.closest(".mp-step2");
+      if (row && row.getAttribute("data-id") === "cwv") runCwvFromOverlay();
     });
 
     function normalizeUrl(v) {
@@ -233,6 +280,12 @@
     var streamTimer = null;
     var ringTimer = null; // scan-progress ring's simulated-crawl interval
     var aiTimers = []; // AI-provider rows' decorative 2s-spin setTimeouts
+    // The current (or most recently started) scan's host + results4 object,
+    // so the overlay's on-demand Core Web Vitals button — which is bound
+    // once at page load, not per-scan — knows what to check and where to
+    // write the result. See runCwvFromOverlay above.
+    var activeScanHost = null;
+    var activeScanResults = null;
 
     // Stops every scan-in-progress timer. Needed on cancel/home-navigation
     // so a stale timer from an abandoned scan doesn't fire later and flip a
@@ -615,17 +668,34 @@
 
     function startScan(host) {
       setState("scanning");
-      Object.keys(stepEls).forEach(function (id) { setStep(id, "active"); });
+      // Every bonus check starts "active" (spinning) EXCEPT Core Web Vitals,
+      // which is opt-in — it stays in its idle "Run check" state (see the
+      // runnable flag on its stepRow) until the button is clicked, either
+      // here or later on the results accordion. Also resets it back to idle
+      // on a fresh scan, in case a previous scan on this page already ran it.
+      Object.keys(stepEls).forEach(function (id) {
+        if (id === "cwv") { stepEls[id].classList.remove("active", "done", "failed"); return; }
+        setStep(id, "active");
+      });
       Object.keys(aiStepEls).forEach(function (id) { setAiStep(id, "pending"); });
       overlay.classList.add("show");
       stream.textContent = "> verifying " + host + "…";
 
       var domain = "https://" + host;
-      var keyword = deriveKeyword(host);
-      var aiPrompt = "is " + keyword + " worth it?";
+      var keyword = deriveKeyword(host); // still used for the Google-ranking check's search keyword
+      // Uses the full website name (not the stripped keyword above) so the
+      // question reads naturally and the model's answer is very likely to
+      // echo the literal domain back — which lib/ai-visibility.ts's mention
+      // detector always checks for directly, on top of the normalized brand
+      // name. Ties the prompt's wording to something concrete and checkable
+      // rather than an auto-derived, sometimes-awkward keyword.
+      var websiteName = host.replace(/^www\./i, "");
+      var aiPrompt = "Is " + websiteName + " legit and trustworthy?";
       var results4 = {};
       var gated = false;
       var scanPass = null;
+      activeScanHost = host;
+      activeScanResults = results4;
 
       function call(path, body, id, extraHeaders) {
         return fetch(API_BASE + path, {
@@ -823,13 +893,15 @@
       });
 
       // ---- "Bonus checks" accordion — the 3 non-AI real checks ----
-      // Core Web Vitals never ran automatically (see AUTO_BONUS_CHECKS above)
-      // — its row renders in a "not run yet" state with a Run check button
-      // instead of a grade, since there's no results4.cwv to grade yet.
+      // Core Web Vitals doesn't run automatically — if it was already
+      // started (and maybe finished) via the overlay's Run check button,
+      // results4.cwv is populated and it renders as a normal graded row
+      // like the other two. Otherwise it renders its own "not run yet" Run
+      // check button (buildCwvRow), same as if it'd never been touched.
       bonusAccordion.innerHTML = "";
       BONUS_CHECKS.forEach(function (c, i) {
         var row;
-        if (c.id === "cwv") {
+        if (c.id === "cwv" && !results4.cwv) {
           row = buildCwvRow(host, c);
         } else {
           var graded = gradeOf(c.id);
