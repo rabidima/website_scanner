@@ -6,7 +6,7 @@
 
   Install:
   1. Deploy stackscan-shopify to Vercel (same deployment as the main embed —
-     this page calls the same 4 scan APIs plus /api/lead and /api/recent-scans).
+     this page calls the same 4 scan APIs plus /api/lead).
      Set env vars: GATE_SECRET, SHOPIFY_SHOP_DOMAIN, SHOPIFY_CLIENT_ID,
      SHOPIFY_CLIENT_SECRET (see .env.example).
      Also connect a Redis database via Vercel Marketplace (Storage tab →
@@ -14,8 +14,9 @@
      connect to this project) — it auto-injects KV_REST_API_URL /
      KV_REST_API_TOKEN. (Standalone Vercel KV is discontinued; Upstash via
      Marketplace is its replacement and uses the same env var names.) Used
-     for the free-scan gate and the recent-scans trust strip, both of which
-     need state shared across serverless instances.
+     for the free-scan gate, which needs state shared across serverless
+     instances (an in-memory counter would reset on every cold start and
+     differ per instance).
      ALLOWED_ORIGINS can be this store's explicit origin(s), or "*" — the gate
      no longer uses cookies (see lib/gate.ts), so there's no cross-site cookie
      restriction driving that choice anymore.
@@ -54,10 +55,6 @@
   calling the API (see isPlausibleWebsite in marketpulse.js) — real
   validation still happens server-side, this just avoids wasting a scan
   attempt on obvious garbage.
-
-  Recent scans strip: shows the last 5 completed scans (any visitor, free or
-  verified) below the trust-logos row, with domain + top detected tech +
-  relative time. Backed by the same Vercel KV store as the gate.
 -->
 <div class="mp-widget state-home" id="mpWidget">
   <style>
@@ -128,15 +125,7 @@
     .mp-trust .lbl{font-size:12px;letter-spacing:1.2px;text-transform:uppercase;color:var(--muted);font-weight:700;margin-bottom:16px}
     .mp-trust .logos{display:flex;align-items:center;justify-content:center;gap:30px;flex-wrap:wrap}
     .mp-trust .logos img{height:30px;width:auto;filter:grayscale(1);opacity:.5}
-    .mp-recent{margin-top:36px;text-align:center}
-    .mp-recent .lbl{font-size:12px;letter-spacing:1.2px;text-transform:uppercase;color:var(--muted);font-weight:700;margin-bottom:14px}
-    .mp-recent .items{display:flex;flex-direction:column;gap:8px;max-width:520px;margin:0 auto}
-    .mp-recent .item{display:flex;align-items:center;justify-content:space-between;gap:14px;background:#fff;border:1px solid var(--line);border-radius:12px;padding:11px 18px;box-shadow:0 2px 8px rgba(12,34,71,.04)}
-    .mp-recent .item .left{display:flex;align-items:baseline;gap:8px;min-width:0;text-align:left}
-    .mp-recent .item .dom{font-weight:700;font-size:13.5px;color:var(--navy-800);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-    .mp-recent .item .tech{font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-    .mp-recent .item .time{font-size:12px;color:var(--muted);white-space:nowrap;flex-shrink:0}
-    @media(max-width:560px){.mp-recent .item .tech{display:none}}
+    .mp-wordmark.sm{font-size:clamp(26px,4vw,36px);margin-bottom:10px}
     .mp-overlay{position:fixed;inset:0;z-index:50;display:none;flex-direction:column;align-items:center;justify-content:center;padding:30px 24px;text-align:center;color:#fff;overflow:auto;background:radial-gradient(900px 600px at 50% 0%, #16407a, #0A1B36 60%)}
     .mp-overlay.show{display:flex;animation:mp-fade .3s ease both}
     @keyframes mp-fade{from{opacity:0}to{opacity:1}}
@@ -299,15 +288,11 @@
           <img src="https://48hourdigital.com/cdn/shop/files/cri-logo.jpg" alt="CRI Genetics" />
         </div>
       </div>
-
-      <div class="mp-recent" id="mpRecent" style="display:none;">
-        <div class="lbl">Recently scanned</div>
-        <div class="items" id="mpRecentItems"></div>
-      </div>
     </section>
 
     <section class="mp-results" id="mpResults">
       <div class="mp-res-head">
+        <div class="mp-wordmark sm"><span class="a">Market</span><span class="b">Pulse</span><span class="ai">AI</span></div>
         <div class="site" id="mpResSite">scan complete for <b>yourbrand.com</b></div>
         <h2>How AI sees your business</h2>
       </div>

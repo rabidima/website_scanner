@@ -138,8 +138,6 @@
     var gateBody = document.getElementById("mpGateBody");
     var urlError = document.getElementById("mpUrlError");
     var subline = document.getElementById("mpSubline");
-    var recentWrap = document.getElementById("mpRecent");
-    var recentItems = document.getElementById("mpRecentItems");
 
     document.getElementById("mpChips").innerHTML = CATALOG.map(function (s) {
       return '<div class="mp-chip">' + iconSvg(s.icon, 15, 15) + s.name + "</div>";
@@ -722,9 +720,6 @@
 
       results.classList.add("show");
       window.scrollTo({ top: 0 });
-      // Refresh the trust strip so this scan shows up in it too — the KV
-      // write is fire-and-forget server-side, so give it a beat first.
-      setTimeout(loadRecentScans, 1200);
     }
 
     document.querySelectorAll(".mp-widget img").forEach(function (im) {
@@ -732,47 +727,14 @@
       if (im.complete && im.naturalWidth === 0) im.style.visibility = "hidden";
     });
 
-    // ---- recent scans trust strip ----
-    // domain/technologies both come from constrained sources server-side
-    // (URL.hostname parsing and a fixed internal tech-name catalog, never
-    // raw user text) so this isn't actually an injection vector today — but
-    // this list is rendered to every visitor, not just the person who ran
-    // the scan, so it's escaped anyway rather than relying on that staying true.
+    // escapeHtml is reused by the results accordion (aiRowBody, bonus-check
+    // bodies) — provider snippets and graded copy are effectively trusted
+    // (backend-generated), but this list renders to whoever ran the scan
+    // and could in principle include LLM-echoed text, so it's escaped anyway
+    // rather than relying on that staying true.
     function escapeHtml(s) {
       return String(s).replace(/[&<>"']/g, function (c) {
         return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
       });
     }
-    function formatRelativeTime(iso) {
-      var then = new Date(iso).getTime();
-      if (isNaN(then)) return "";
-      var diffSec = Math.max(0, Math.round((Date.now() - then) / 1000));
-      var min = Math.floor(diffSec / 60);
-      if (min < 1) return "just now";
-      if (min < 60) return min + " minute" + (min === 1 ? "" : "s") + " ago";
-      var hr = Math.floor(min / 60);
-      if (hr < 24) return hr + " hour" + (hr === 1 ? "" : "s") + " ago";
-      var day = Math.floor(hr / 24);
-      if (day < 30) return day + " day" + (day === 1 ? "" : "s") + " ago";
-      var mo = Math.floor(day / 30);
-      return mo + " month" + (mo === 1 ? "" : "s") + " ago";
-    }
-    function loadRecentScans() {
-      if (!recentWrap || !recentItems) return; // stale-HTML safety, same as onIfPresent elsewhere
-      fetch(API_BASE + "/api/recent-scans")
-        .then(function (res) { return res.json(); })
-        .then(function (data) {
-          var scans = (data && data.scans) || [];
-          if (!scans.length) return;
-          recentItems.innerHTML = scans.map(function (s) {
-            var techs = (s.technologies || []).slice(0, 3).join(", ");
-            return '<div class="item"><div class="left"><span class="dom">' + escapeHtml(s.domain) + "</span>" +
-              (techs ? '<span class="tech">' + escapeHtml(techs) + "</span>" : "") + "</div>" +
-              '<span class="time">' + escapeHtml(formatRelativeTime(s.scannedAt)) + "</span></div>";
-          }).join("");
-          recentWrap.style.display = "";
-        })
-        .catch(function () { /* nice-to-have — fails silently, strip just stays hidden */ });
-    }
-    loadRecentScans();
   })();
