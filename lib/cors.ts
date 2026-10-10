@@ -43,7 +43,10 @@ export function corsHeaders(allowedOrigin: string | null): Record<string, string
   return {
     "Access-Control-Allow-Origin": allowedOrigin,
     "Access-Control-Allow-Methods": "POST, OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type, Authorization",
+    // X-Scan-Pass is sent by marketpulse.js on the SEO/AI calls (see
+    // lib/gate.ts). Any custom request header must be listed here or the
+    // browser's preflight rejects the call before it ever reaches the route.
+    "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Scan-Pass",
     "Access-Control-Max-Age": "86400",
     Vary: "Origin",
   };
